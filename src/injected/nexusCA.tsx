@@ -150,6 +150,9 @@ function NexusApp() {
   const unifiedBalancesRef = useRef<UserAsset[] | null>(null);
 
   const requiredAmountRef = useRef<string | null>(null);
+  
+  // Track destination chainId for bridging (set when ca.bridge() is called)
+  const destinationChainIdRef = useRef<number | null>(null);
 
   ca.setOnIntentHook(({ intent, allow, deny, refresh }) => {
     debugInfo("ON INTENT HOOK", { intent, allow, deny, refresh });
@@ -165,16 +168,21 @@ function NexusApp() {
 
   const handleExpectedSteps = (data: Step[]) => {
     try {
+      // Check if this is Aave flow (Base chain) - use destination chainId if available
+      const targetChainId = destinationChainIdRef.current || chainId;
+      const isAaveFlow = targetChainId === 8453 && window.location.hostname.includes("aave.com");
+      
       const newSteps = [
         ...data.map((s) => ({
           ...s,
           done: false,
         })),
-        {
+        // Don't add SUBMIT_TRANSACTION step for Aave - user will manually approve & supply
+        ...(!isAaveFlow ? [{
           type: "SUBMIT_TRANSACTION",
           typeID: "ST",
           done: false,
-        },
+        }] : []),
       ];
       setIntentStepsOpen(true);
       setSteps(newSteps);
@@ -230,26 +238,47 @@ function NexusApp() {
           break;
 
         case "INTENT_COLLECTION_COMPLETE":
-          // Get destination chain name dynamically
+          // Use destination chainId if available (from ca.bridge call), otherwise current chainId
+          const targetChainId = destinationChainIdRef.current || chainId;
           const destinationChainName = 
-            chainId === 1 ? "Ethereum Mainnet" : 
-            chainId === 999 ? "HyperEVM" :
-            chainId === 42161 ? "Arbitrum One" :
-            chainId === 8453 ? "Base" :
-            chainId === 10 ? "Optimism" :
-            chainId === 137 ? "Polygon" :
-            chainId === 43114 ? "Avalanche" :
-            chainId === 56 ? "BNB Chain" :
-            `Chain ${chainId}`;
+            targetChainId === 1 ? "Ethereum Mainnet" : 
+            targetChainId === 999 ? "HyperEVM" :
+            targetChainId === 42161 ? "Arbitrum One" :
+            targetChainId === 8453 ? "Base" :
+            targetChainId === 10 ? "Optimism" :
+            targetChainId === 137 ? "Polygon" :
+            targetChainId === 43114 ? "Avalanche" :
+            targetChainId === 56 ? "BNB Chain" :
+            `Chain ${targetChainId}`;
           setTitle(`Receiving on ${destinationChainName}`);
           break;
 
         case "INTENT_FULFILLED":
-          setTitle("Submitting Transaction");
+          // Check if this is Aave USDC bridging (Base chain, no auto-submit)
+          const isAaveFlow = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("aave.com");
+          if (isAaveFlow) {
+            setTitle("Switching to Base...");
+            // Switch to Base chain after bridging completes
+            (window as any).ethereum?.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x2105" }], // Base = 8453 = 0x2105
+            }).then(() => {
+              setTitle("✅ Ready to Supply on Aave");
+            }).catch((error: any) => {
+              console.error("Failed to switch to Base:", error);
+              setTitle("Bridging Complete - Switch to Base Manually");
+            });
+          } else {
+            setTitle("Completing Transaction");
+          }
           break;
 
         case "SUBMIT_TRANSACTION":
-          setTitle("Submitting Transaction");
+          // Don't show this step for Aave since there's no auto-submit
+          const isAave = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("aave.com");
+          if (!isAave) {
+            setTitle("Submitting Transaction");
+          }
           break;
 
         default:
@@ -334,6 +363,8 @@ function NexusApp() {
             });
             await ca.initialize(provider.provider);
             window.nexus = ca;
+            // Expose destination chainId ref for progress tracking
+            (window as any).nexusDestinationChainId = destinationChainIdRef;
             if (
               window.origin === "https://app.hyperlend.finance" ||
               window.origin === "https://www.usefelix.xyz" ||

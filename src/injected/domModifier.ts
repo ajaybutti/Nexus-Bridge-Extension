@@ -1078,15 +1078,15 @@ function injectDomModifier() {
   }
 }
 
-// Aave V3 Integration - Initialize ONCE when on Base market
+// Aave V3 Integration - Show popup when Aave's Supply modal opens
 async function initializeAaveIntegration() {
-  // Check if we're on Aave with Base market (proto_base_v3) in URL
+  // Check if we're on Aave Base market dashboard
   const isAaveBaseMarket = (window.location.hostname.includes("app.aave.com") || window.location.hostname === "aave.com") &&
     window.location.search.includes("marketName=proto_base_v3");
   
   if (!isAaveBaseMarket) {
     console.log("🏦 NEXUS: Not on Base market, skipping Aave integration");
-    return; // Exit if not on Base market
+    return;
   }
 
   // Guard to prevent multiple initializations
@@ -1095,118 +1095,50 @@ async function initializeAaveIntegration() {
   }
   (window as any).__nexusAaveInitialized = true;
 
-  console.log("🏦 NEXUS: Initializing Aave Base market integration...");
+  console.log("🏦 NEXUS: Aave integration active - will show popup when USDC Supply modal opens");
 
-  try {
-    // Fetch unified balances ONCE
-    const unifiedBalances = await fetchUnifiedBalances();
+  // Watch for Aave's Supply modal to appear
+  const observer = new MutationObserver(async () => {
+    // Look for Aave's Supply modal (it contains "Supply USDC" text and an input)
+    const modalTitles = Array.from(document.querySelectorAll('h2, h3, div[class*="title"], div[class*="header"]'));
+    const supplyModal = modalTitles.find(el => el.textContent?.includes('Supply USDC'));
     
-    // Find USDC balance across all chains
-    const usdcAsset = unifiedBalances.find((bal: any) => bal.symbol === "USDC");
-
-    if (!usdcAsset) {
-      console.log("🏦 NEXUS: No USDC found");
-      return;
-    }
-
-    const totalUsdcBalance = parseFloat(usdcAsset.balance || "0");
-    const usdcChains = usdcAsset.breakdown.filter((token: any) => 
-      Number(token.balance) > 0
-    );
-
-    console.log("🏦 NEXUS: USDC found:", {
-      total: totalUsdcBalance,
-      chains: usdcChains.length
-    });
-
-    // Create or update unified USDC display
-    let unifiedUsdcDiv = document.querySelector('.nexus-unified-usdc-balance') as HTMLElement;
-    
-    if (!unifiedUsdcDiv) {
-      unifiedUsdcDiv = document.createElement('div');
-      unifiedUsdcDiv.className = 'nexus-unified-usdc-balance';
-      unifiedUsdcDiv.style.cssText = `
-        position: fixed;
-        top: 120px;
-        right: 20px;
-        width: 320px;
-        padding: 16px;
-        background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        font-size: 14px;
-        color: white;
-        z-index: 10000;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-      `;
-
-      document.body.appendChild(unifiedUsdcDiv);
-    }
-
-    if (totalUsdcBalance > 0) {
-      unifiedUsdcDiv.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-          <span style="font-weight: 600; color: #fff; font-size: 16px;">💰 Unified USDC</span>
-          <span style="font-weight: bold; color: #000; font-size: 18px;">$${totalUsdcBalance.toFixed(2)}</span>
-        </div>
-        <div style="font-size: 12px; color: rgba(0,0,0,0.8); line-height: 1.4;">
-          <div style="margin-bottom: 8px; font-weight: 600;">Available across ${usdcChains.length} ${usdcChains.length === 1 ? 'chain' : 'chains'}:</div>
-          ${usdcChains.map((chain: any) => `
-            <div style="margin: 6px 0; display: flex; justify-content: space-between; background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 6px;">
-              <span style="font-weight: 500;">${removeMainnet(chain.chain.name)}</span>
-              <span style="color: #000; font-weight: 600;">$${parseFloat(chain.balance).toFixed(2)}</span>
-            </div>
-          `).join('')}
-          <div style="margin-top: 12px; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 11px; text-align: center;">
-            💡 Nexus will automatically bridge USDC when you supply on Aave
-          </div>
-          <button id="nexus-supply-usdc-btn" style="
-            width: 100%;
-            margin-top: 12px;
-            padding: 10px;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            border: none;
-            border-radius: 8px;
-            color: #fff;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-          " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-            🏦 Supply with Unified USDC
-          </button>
-          <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.15); border-radius: 4px; font-size: 10px;">
-            🔍 Wallet: ${(window as any).ethereum?.selectedAddress?.substring(0, 8) || 'Not connected'}...
-          </div>
-        </div>
-      `;
+    if (supplyModal && !(window as any).__nexusAaveModalShown) {
+      console.log("🏦 NEXUS: Aave Supply USDC modal detected!");
+      (window as any).__nexusAaveModalShown = true;
       
-      // Add click handler for the supply button
-      const supplyButton = unifiedUsdcDiv.querySelector('#nexus-supply-usdc-btn') as HTMLButtonElement;
-      if (supplyButton) {
-        supplyButton.removeEventListener('click', () => {}); // Remove old listeners
-        supplyButton.addEventListener('click', () => {
-          console.log("🏦 NEXUS: Opening unified USDC supply modal");
-          openUnifiedUsdcSupplyModal(totalUsdcBalance, usdcChains);
-        });
+      // Wait a bit for modal to fully render
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Fetch unified balances
+      const unifiedBalances = await fetchUnifiedBalances();
+      const usdcAsset = unifiedBalances.find((bal: any) => bal.symbol === "USDC");
+      
+      if (!usdcAsset) {
+        console.log("🏦 NEXUS: No USDC found");
+        return;
       }
-    } else {
-      unifiedUsdcDiv.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-          <span style="font-weight: 600; color: #fff;">💰 Unified USDC</span>
-          <span style="font-weight: bold; color: #000;">$0.00</span>
-        </div>
-        <div style="font-size: 12px; color: rgba(0,0,0,0.8);">
-          <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.3); border-radius: 6px; text-align: center;">
-            No USDC found across chains
-          </div>
-        </div>
-      `;
+      
+      const totalUsdcBalance = parseFloat(usdcAsset.balance || "0");
+      const usdcChains = usdcAsset.breakdown.filter((token: any) => Number(token.balance) > 0);
+      
+      if (totalUsdcBalance > 0) {
+        console.log(`🏦 NEXUS: Showing unified USDC popup with $${totalUsdcBalance} across ${usdcChains.length} chains`);
+        openUnifiedUsdcSupplyModal(totalUsdcBalance, usdcChains);
+      }
     }
-  } catch (error) {
-    console.error("🏦 NEXUS: Error initializing Aave integration:", error);
-  }
+    
+    // Reset flag when modal closes
+    if (!supplyModal && (window as any).__nexusAaveModalShown) {
+      (window as any).__nexusAaveModalShown = false;
+    }
+  });
+  
+  // Observe the whole page for modal changes
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 }
 
 // Function to open unified ETH stake modal
@@ -1276,7 +1208,7 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
         ETH Amount to Stake
       </label>
       <div style="position: relative;">
-        <input type="number" id="nexus-eth-amount" placeholder="0.0" step="0.0001" max="${totalEthBalance}" 
+        <input type="text" inputmode="decimal" id="nexus-eth-amount" placeholder="0.0" 
                style="
                  width: 100%;
                  padding: 16px 50px 16px 16px;
@@ -1291,7 +1223,8 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
                  box-sizing: border-box;
                " 
                onfocus="this.style.borderColor='#00ff88'"
-               onblur="this.style.borderColor='rgba(255,255,255,0.2)'">
+               onblur="this.style.borderColor='rgba(255,255,255,0.2)'"
+               oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');">
         <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600;">ETH</span>
       </div>
       <button id="nexus-max-btn" style="
@@ -1492,6 +1425,7 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
     align-items: center;
     z-index: 999999;
     backdrop-filter: blur(5px);
+    pointer-events: none;
   `;
   
   // Create modal content
@@ -1506,6 +1440,9 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
     border: 1px solid rgba(0, 255, 136, 0.2);
     color: white;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1000000;
   `;
   
   modalContent.innerHTML = `
@@ -1533,24 +1470,58 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
       <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: #fff;">
         USDC Amount to Supply
       </label>
-      <div style="position: relative;">
-        <input type="number" id="nexus-usdc-amount" placeholder="0.00" step="0.01" max="${totalUsdcBalance}" 
-               style="
-                 width: 100%;
-                 padding: 16px 70px 16px 16px;
-                 background: rgba(255,255,255,0.1);
-                 border: 2px solid rgba(0,255,136,0.3);
-                 border-radius: 12px;
-                 color: white;
-                 font-size: 18px;
-                 font-weight: 600;
-                 outline: none;
-                 transition: all 0.3s ease;
-                 box-sizing: border-box;
-               " 
-               onfocus="this.style.borderColor='#00ff88'"
-               onblur="this.style.borderColor='rgba(0,255,136,0.3)'">
-        <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600;">USDC</span>
+      <div style="position: relative; display: flex; align-items: center; gap: 8px;">
+        <button id="nexus-usdc-decrement" style="
+          padding: 12px 16px;
+          background: rgba(255,59,48,0.2);
+          border: 1px solid #ff3b30;
+          border-radius: 8px;
+          color: #ff3b30;
+          font-size: 20px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        " onmouseover="this.style.background='rgba(255,59,48,0.3)'" onmouseout="this.style.background='rgba(255,59,48,0.2)'">
+          −
+        </button>
+        <div style="position: relative; flex: 1;">
+          <input 
+            type="text" 
+            inputmode="decimal" 
+            id="nexus-usdc-amount" 
+            placeholder="0.00"
+            autocomplete="off"
+            spellcheck="false"
+            style="
+              width: 100%;
+              padding: 16px 70px 16px 16px;
+              background: rgba(255,255,255,0.1);
+              border: 2px solid rgba(0,255,136,0.3);
+              border-radius: 12px;
+              color: white;
+              font-size: 18px;
+              font-weight: 600;
+              outline: none;
+              transition: all 0.3s ease;
+              box-sizing: border-box;
+            ">
+          <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600; pointer-events: none;">USDC</span>
+        </div>
+        <button id="nexus-usdc-increment" style="
+          padding: 12px 16px;
+          background: rgba(0,255,136,0.2);
+          border: 1px solid #00ff88;
+          border-radius: 8px;
+          color: #00ff88;
+          font-size: 20px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        " onmouseover="this.style.background='rgba(0,255,136,0.3)'" onmouseout="this.style.background='rgba(0,255,136,0.2)'">
+          +
+        </button>
       </div>
       <button id="nexus-usdc-max-btn" style="
         margin-top: 8px;
@@ -1606,15 +1577,102 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
   modalOverlay.appendChild(modalContent);
   document.body.appendChild(modalOverlay);
   
-  // Add event listeners
+  // Add event listeners - back to regular input
   const usdcAmountInput = modalOverlay.querySelector('#nexus-usdc-amount') as HTMLInputElement;
+  const incrementBtn = modalOverlay.querySelector('#nexus-usdc-increment') as HTMLButtonElement;
+  const decrementBtn = modalOverlay.querySelector('#nexus-usdc-decrement') as HTMLButtonElement;
   const maxBtn = modalOverlay.querySelector('#nexus-usdc-max-btn') as HTMLButtonElement;
   const cancelBtn = modalOverlay.querySelector('#nexus-usdc-cancel-btn') as HTMLButtonElement;
   const confirmBtn = modalOverlay.querySelector('#nexus-usdc-confirm-btn') as HTMLButtonElement;
   
+  // Focus on input
+  setTimeout(() => {
+    usdcAmountInput.focus();
+    console.log("🎯 NEXUS: Focused on USDC input");
+  }, 100);
+  
+  // Input validation - only allow numbers and decimal point
+  usdcAmountInput.addEventListener('input', (e) => {
+    let value = usdcAmountInput.value.replace(/[^0-9.]/g, '');
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+    usdcAmountInput.value = value;
+  });
+  
+  // Increment button - add 0.2 USDC
+  incrementBtn.addEventListener('click', () => {
+    const currentValue = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.min(currentValue + 0.2, totalUsdcBalance);
+    usdcAmountInput.value = newValue.toFixed(2);
+    console.log("➕ NEXUS: Incremented to", newValue);
+  });
+  
+  // Decrement button - subtract 0.2 USDC
+  decrementBtn.addEventListener('click', () => {
+    const currentValue = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.max(currentValue - 0.2, 0);
+    usdcAmountInput.value = newValue.toFixed(2);
+    console.log("➖ NEXUS: Decremented to", newValue);
+  });
+  // Add focus/blur styling
+  usdcAmountInput.addEventListener('focus', () => {
+    usdcAmountInput.style.borderColor = '#00ff88';
+    console.log("✨ NEXUS: Input focused");
+  });
+  
+  usdcAmountInput.addEventListener('blur', () => {
+    usdcAmountInput.style.borderColor = 'rgba(0,255,136,0.3)';
+    console.log("💤 NEXUS: Input blurred");
+  });
+  
+  // STOP ALL EVENT PROPAGATION - prevent Aave from blocking our input
+  usdcAmountInput.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log("⌨️ NEXUS: Keydown event:", e.key, "keyCode:", e.keyCode);
+  }, true);
+  
+  usdcAmountInput.addEventListener('keypress', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log("⌨️ NEXUS: Keypress event:", e.key, "charCode:", e.charCode);
+  }, true);
+  
+  usdcAmountInput.addEventListener('keyup', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log("⌨️ NEXUS: Keyup event:", e.key);
+  }, true);
+  
+  // Input validation - only allow numbers and decimal point
+  usdcAmountInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log("⌨️ NEXUS: Input event fired!");
+    const input = e.target as HTMLInputElement;
+    // Remove any non-numeric characters except decimal point
+    let value = input.value.replace(/[^0-9.]/g, '');
+    // Only allow one decimal point
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+    input.value = value;
+    console.log("⌨️ NEXUS: Input value changed to:", value);
+  }, true);
+  
+  // Ensure input is always focusable on click
+  usdcAmountInput.addEventListener('click', (e) => {
+    e.stopPropagation();
+    usdcAmountInput.focus();
+    console.log("🖱️ NEXUS: Input clicked and focused");
+  });
+  
   // Max button functionality
   maxBtn.addEventListener('click', () => {
-    usdcAmountInput.value = totalUsdcBalance.toString();
+    usdcAmountInput.value = totalUsdcBalance.toFixed(2);
   });
   
   // Cancel button
@@ -1622,9 +1680,16 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
     modalOverlay.remove();
   });
   
+  // Close on overlay background click
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      modalOverlay.remove();
+    }
+  });
+  
   // Confirm button - Calculate deficit and trigger bridging to Base
   confirmBtn.addEventListener('click', async () => {
-    const supplyAmount = parseFloat(usdcAmountInput.value);
+    const supplyAmount = parseFloat(usdcAmountInput.value || '0');
     
     if (!supplyAmount || supplyAmount <= 0) {
       alert('Please enter a valid USDC amount');
@@ -1676,6 +1741,12 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
       }
       
       console.log(`💫 NEXUS: Calling ca.bridge() to bridge ${deficit.toFixed(2)} USDC deficit to Base (chainId: 8453)`);
+      
+      // Set destination chainId for progress tracking
+      if ((window as any).nexusDestinationChainId) {
+        (window as any).nexusDestinationChainId.current = 8453;
+        console.log("🎯 NEXUS: Set destination chainId to 8453 (Base)");
+      }
       
       // Bridge ONLY the deficit amount from other chains to Base
       const bridgeResult = await (window as any).nexus.bridge({
