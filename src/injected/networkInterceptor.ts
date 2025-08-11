@@ -32,7 +32,6 @@ function injectNetworkInterceptor() {
       try {
         payload = JSON.parse(payloadString);
       } catch (error) {
-        console.error("Failed to parse request body as JSON:", error);
         return originalFetch.apply(this, args);
       }
       if (
@@ -40,26 +39,15 @@ function injectNetworkInterceptor() {
         payload.params?.[0] &&
         payload.params[0].to?.toLowerCase() === MulticallAddress
       ) {
-        debugInfo(
-          "Intercepted eth_call request:",
-          payload.params[0].to,
-          payload.params[0].data
-        );
         const decoded = decodeFunctionData({
           abi: MulticallAbi,
           data: payload.params[0].data,
         });
-        debugInfo(
-          "Decoded multicall data:",
-          decoded,
-          decoded.functionName === "aggregate3"
-        );
         if (decoded.functionName === "aggregate3") {
           const responseData = await response.clone().json();
-          debugInfo("Multicall response data:", responseData);
           if (!responseData.result) {
-            console.warn(
-              "No result in multicall response, returning original response"
+            debugInfo(
+              "No result in aggregate3 response, returning original response"
             );
             return response;
           }
@@ -68,40 +56,20 @@ function injectNetworkInterceptor() {
             functionName: "aggregate3",
             data: responseData.result,
           }) as { success: boolean; returnData: string }[];
-          debugInfo("Decoded multicall response:", decodedResult);
           const params = decoded.args![0] as {
             target: string;
             callData: `0x${string}`;
             allowFailure: boolean;
           }[];
-          debugInfo("Multicall params:", params);
-          const unifiedBalances = await window.arcana.ca.getUnifiedBalances();
+          const unifiedBalances = await window.nexus.getUnifiedBalances();
           debugInfo("Unified balances:", unifiedBalances);
           params.forEach((param, pIndex) => {
             try {
-              debugInfo(
-                "Decoding callData for target:",
-                param.target,
-                "callData:",
-                param.callData
-              );
               const decodedParam = decodeFunctionData({
                 abi: MulticallAbi,
                 data: param.callData,
               });
-              debugInfo(
-                "Decoded callData:",
-                decodedParam,
-                "for target:",
-                param.target,
-                "and account: ",
-                decodedParam.args![0]
-              );
               if (decodedParam.functionName !== "balanceOf") {
-                debugInfo(
-                  "Skipping non-balanceOf function call for target:",
-                  param.target
-                );
                 return;
               }
               const index = unifiedBalances.findIndex((bal) =>
@@ -125,12 +93,6 @@ function injectNetworkInterceptor() {
                     .toFixed()
                 ),
               });
-              debugInfo(
-                "Modified returnData for target:",
-                param.target,
-                "to:",
-                decodedResult[pIndex].returnData
-              );
             } catch (error) {
               console.error(
                 "Failed to decode callData for target:",
@@ -145,7 +107,7 @@ function injectNetworkInterceptor() {
             functionName: "aggregate3",
             result: decodedResult,
           });
-          debugInfo("modified result:", modifiedResult);
+          debugInfo("modified result");
           return createResponse({
             jsonrpc: "2.0",
             id: payload.id,
@@ -154,7 +116,6 @@ function injectNetworkInterceptor() {
         }
       }
     }
-    debugInfo("Fetch response:", response);
     return response;
   };
 }

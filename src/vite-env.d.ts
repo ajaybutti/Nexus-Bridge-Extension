@@ -4,8 +4,6 @@ import { NexusSDK } from "@avail-project/nexus/core";
 
 declare global {
   interface Window {
-    arcana: {
-      ca: NexusSDK;
-    };
+    nexus: NexusSDK;
   }
 }

@@ -1,8 +1,6 @@
 import { EthereumProvider, NexusSDK } from "@avail-project/nexus/core";
 import { debugInfo } from "../utils/debug";
 
-debugInfo("Nexus SDK version:", NexusSDK);
-
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
 };
@@ -19,12 +17,10 @@ window.addEventListener("eip6963:announceProvider", (event: any) => {
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 
 async function injectNexusCA() {
-  window.arcana = {
-    ca: new NexusSDK({
-      network: "mainnet",
-      debug: true,
-    }),
-  };
+  window.nexus = new NexusSDK({
+    network: "mainnet",
+    debug: true,
+  });
 
   if (!providers.length) {
     debugInfo(
@@ -36,30 +32,26 @@ async function injectNexusCA() {
   for (const provider of providers) {
     if (provider) {
       const originalRequest = provider.request;
-      debugInfo("Original provider request:", originalRequest, provider);
 
       provider.request = async function (...args) {
         const { method, params } = args[0];
-        debugInfo("Intercepted request:", method, params);
-        debugInfo("Provider:", provider);
+        debugInfo("Intercepted request:", method, params, provider);
         if (["eth_requestAccounts", "eth_accounts"].includes(method)) {
           const res = await originalRequest.apply(this, args);
           debugInfo("Response from original request:", res);
           if (res) {
-            debugInfo("Arcana CA init");
-            debugInfo("Arcana CA setEVMProvider with provider:", provider);
             try {
-              debugInfo("Initializing Arcana CA");
-              debugInfo("CA accounts:", window.arcana.ca);
-              window.arcana.ca.initialize(provider);
+              debugInfo("Initializing Nexus SDK");
+              debugInfo("CA accounts:", window.nexus);
+              window.nexus.initialize(provider);
             } catch (error) {
-              console.error("Error initializing Arcana CA:", error);
+              console.error("Error initializing Nexus SDK:", error);
               debugInfo(
-                "Arcana CA initialization failed, continuing without CA",
+                "Nexus SDK initialization failed, continuing without Chain Abstraction",
                 error
               );
             }
-            debugInfo("Arcana CA initialized with accounts:", res);
+            debugInfo("Nexus SDK initialized with accounts:", res);
           }
           return res;
         }
@@ -71,17 +63,16 @@ async function injectNexusCA() {
         const originalIsConnected = provider.isConnected;
         provider.isConnected = async function (...args) {
           const isConnected = await originalIsConnected.apply(this, args);
-          debugInfo("Arcana CA init");
           debugInfo("Provider isConnected result:", isConnected);
           debugInfo("Provider:", provider);
           if (isConnected) {
             try {
-              debugInfo("Initializing Arcana CA");
-              window.arcana.ca.initialize(provider);
+              debugInfo("Initializing Nexus SDK");
+              window.nexus.initialize(provider);
             } catch (error) {
-              console.error("Error initializing Arcana CA:", error);
+              console.error("Error initializing Nexus SDK:", error);
               debugInfo(
-                "Arcana CA initialization failed, continuing without CA",
+                "Nexus SDK initialization failed, continuing without Chain Abstraction",
                 error
               );
             }
