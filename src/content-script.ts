@@ -14,7 +14,8 @@ Browser.runtime
   .then((response: any) => {
     console.log("Chain abstraction state:", response);
     if (response.enabled) {
-      injectProviderScript("src/injected/nexus-ca.js");
+      injectProviderScript("src/injected/nexusCA.js");
+      injectProviderScript("src/injected/networkInterceptor.js");
     }
   })
   .catch((error) => {

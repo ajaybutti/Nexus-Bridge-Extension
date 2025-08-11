@@ -31,9 +31,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/injected/nexus-ca.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "src/injected/nexusCA.js",
+        "src/injected/networkInterceptor.js"
+      ],
+      "matches": ["https://app.hyperliquid.xyz/*"]
     }
   ],
-  "permissions": ["storage", "unlimitedStorage", "activeTab", "tabs"]
+  "permissions": ["storage", "activeTab", "tabs"]
 }

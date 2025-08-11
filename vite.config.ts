@@ -7,8 +7,8 @@ function generateManifest() {
   const manifest = readJsonFile("src/manifest.json");
   const pkg = readJsonFile("package.json");
   return {
-    name: pkg.name,
-    description: pkg.description,
+    name: "Nexus Injection",
+    description: "Injects Nexus SDK into web3 pages",
     version: pkg.version,
     ...manifest,
   };
@@ -42,7 +42,10 @@ export default defineConfig({
       manifest: generateManifest,
       watchFilePaths: ["package.json", "manifest.json"],
       browser: process.env.TARGET || "chrome",
-      additionalInputs: ["src/injected/nexus-ca.ts"],
+      additionalInputs: [
+        "src/injected/nexusCA.ts",
+        "src/injected/networkInterceptor.ts",
+      ],
     }),
     nodePolyfillsFix({
       exclude: [

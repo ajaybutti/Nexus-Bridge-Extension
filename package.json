@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "@avail-project/nexus": "^0.1.2",
+    "decimal.js": "^10.6.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "viem": "^2.33.3",
     "vite-plugin-node-polyfills": "^0.24.0"
   },
   "devDependencies": {
