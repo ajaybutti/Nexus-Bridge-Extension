@@ -5,5 +5,6 @@ import { NexusSDK } from "@avail-project/nexus/core";
 declare global {
   interface Window {
     nexus: NexusSDK;
+    nexusCache: Map<string, any>;
   }
 }

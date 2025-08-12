@@ -7,6 +7,7 @@ import { MulticallAbi, MulticallAddress } from "../utils/multicall";
 import Decimal from "decimal.js";
 import { createResponse } from "../utils/response";
 import { debugInfo } from "../utils/debug";
+import { fetchUnifiedBalances } from "./cache";
 
 function injectNetworkInterceptor() {
   const originalFetch = window.fetch;
@@ -61,8 +62,7 @@ function injectNetworkInterceptor() {
             callData: `0x${string}`;
             allowFailure: boolean;
           }[];
-          const unifiedBalances = await window.nexus.getUnifiedBalances();
-          debugInfo("Unified balances:", unifiedBalances);
+          const unifiedBalances = await fetchUnifiedBalances();
           params.forEach((param, pIndex) => {
             try {
               const decodedParam = decodeFunctionData({
@@ -114,7 +114,6 @@ function injectNetworkInterceptor() {
             functionName: "aggregate3",
             result: decodedResult,
           });
-          debugInfo("modified result");
           return createResponse({
             jsonrpc: "2.0",
             id: payload.id,

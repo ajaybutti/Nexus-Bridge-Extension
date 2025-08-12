@@ -2,8 +2,6 @@ import {
   EthereumProvider,
   NexusSDK,
   SUPPORTED_CHAINS,
-  TOKEN_CONTRACT_ADDRESSES,
-  TOKEN_METADATA,
 } from "@avail-project/nexus/core";
 import { debugInfo } from "../utils/debug";
 import Decimal from "decimal.js";
@@ -16,6 +14,9 @@ import {
 } from "@avail-project/nexus/ui";
 import { createRoot, Root } from "react-dom/client";
 import { erc20Abi } from "viem";
+import { useEffect, useRef } from "react";
+import { TOKEN_MAPPING } from "../utils/constants";
+import { fetchUnifiedBalances } from "./cache";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -36,22 +37,20 @@ let reactRoot: Root;
 
 function render(App: React.FC) {
   const nexusRoot = document.getElementById("nexus-root");
-  debugInfo("Nexus root element:", nexusRoot);
   if (!nexusRoot) {
-    debugInfo("Nexus root element not found, creating it");
     const newNexusRoot = document.createElement("div");
     newNexusRoot.id = "nexus-root";
     document.body.appendChild(newNexusRoot);
-    debugInfo("Nexus root element created");
-    debugInfo(document.getElementById("nexus-root"));
   }
 
   if (!reactRoot) {
-    debugInfo("Creating React root for Nexus SDK");
     reactRoot = createRoot(document.getElementById("nexus-root")!);
   }
 
-  debugInfo("Rendering Nexus App");
+  document
+    .querySelector(".sc-bBABsx.fAsTrb:has(.sc-fLcnxK.iOdKba.modal)")
+    ?.setAttribute("style", "z-index: 40");
+
   reactRoot.render(<App />);
 }
 
@@ -68,12 +67,12 @@ async function injectNexusCA() {
     );
     return;
   }
-  debugInfo("Providers found:", providers);
   for (const provider of providers) {
     if (provider) {
       const originalRequest = provider.request;
 
       provider.request = async function (...args) {
+        let isNexusRequest = false;
         const { method, params } = args[0] as {
           method: string;
           params?: any[];
@@ -81,30 +80,27 @@ async function injectNexusCA() {
         debugInfo("Intercepted request:", method, params, provider);
         if (["eth_requestAccounts", "eth_accounts"].includes(method)) {
           const res = await originalRequest.apply(this, args);
-          debugInfo("Response from original request:", res);
           if (res && !initialized) {
             try {
               debugInfo("Initializing Nexus SDK");
-              debugInfo("CA accounts:", window.nexus);
               window.nexus.initialize(provider);
               initialized = true;
+              fetchUnifiedBalances();
             } catch (error) {
-              console.error("Error initializing Nexus SDK:", error);
               debugInfo(
                 "Nexus SDK initialization failed, continuing without Chain Abstraction",
                 error
               );
             }
-            debugInfo("Nexus SDK initialized with accounts:", res);
           }
           return res;
         }
         if (
           method === "eth_sendTransaction" &&
           params?.[0] &&
-          params[0].data.toLowerCase().startsWith("0xa9059cbb") // ERC20 transfer
+          (params[0].data.toLowerCase().startsWith("0xa9059cbb") || // ERC20 transfer
+            params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
         ) {
-          debugInfo("Intercepted ERC20 transfer transaction:", params[0]);
           const unifiedBalances = await window.nexus.getUnifiedBalances();
           const tokenAddress = params[0].to.toLowerCase();
           const tokenIndex = unifiedBalances.findIndex((bal) =>
@@ -123,129 +119,143 @@ async function injectNexusCA() {
             data: params[0].data,
           });
 
+          const amount = params[0].data.toLowerCase().startsWith("0xa9059cbb")
+            ? (decodedData.args![1] as bigint).toString()
+            : (decodedData.args![2] as bigint).toString();
+
+          debugInfo("amount decoded:", amount);
+          debugInfo("actual contract:", decodedData.args![0]);
+
           if (
             new Decimal(actualToken?.balance || "0")
               .mul(Decimal.pow(10, actualToken?.decimals || 0))
-              .lessThan((decodedData.args![1] as bigint).toString())
+              .lessThan(amount)
           ) {
-            // function NexusApp() {
-            //   debugInfo("transferdata:", {
-            //     token: actualToken,
-            //     amount: decodedData.args![1],
-            //   });
-            //   const { setProvider } = useNexus();
-            //   debugInfo("Setting provider with Chain Abstraction");
-            //   debugInfo(
-            //     "Nexus SDK provider:",
-            //     window.nexus.getEVMProviderWithCA()
-            //   );
-            //   setProvider(window.nexus.getEVMProviderWithCA());
-            //   debugInfo("Nexus SDK provider set with Chain Abstraction");
-            //   return (
-            //     <BridgeAndExecuteButton
-            //       contractAddress="0x2df1c51e09aecf9cacb7bc98cb1742757f163df7"
-            //       // @ts-expect-error
-            //       contractAbi={erc20TransferAbi}
-            //       functionName="transfer"
-            //       prefill={{
-            //         toChainId: SUPPORTED_CHAINS.ARBITRUM,
-            //         token: "USDC",
-            //         amount: "5",
-            //       }}
-            //       buildFunctionParams={(token, amount, _chainId, user) => {
-            //         const decimals = TOKEN_METADATA[token].decimals;
-            //         const amountWei = parseUnits(amount, decimals);
-            //         const tokenAddr = TOKEN_CONTRACT_ADDRESSES[token][_chainId];
-            //         return { functionParams: [tokenAddr, amountWei, user, 0] };
-            //       }}
-            //     >
-            //       {({ onClick, isLoading, disabled }) => (
-            //         <button
-            //           id="nexus-button"
-            //           onClick={onClick}
-            //           disabled={disabled || isLoading}
-            //         >
-            //           {isLoading
-            //             ? "Processing…"
-            //             : "Bridge & Supply to Hyperliquid"}
-            //         </button>
-            //       )}
-            //     </BridgeAndExecuteButton>
-            //   );
-            // }
-            // function NexusProviderApp() {
-            //   return (
-            //     <NexusProvider
-            //       config={{
-            //         debug: true,
-            //         network: "mainnet",
-            //       }}
-            //     >
-            //       <NexusApp />
-            //     </NexusProvider>
-            //   );
-            // }
-            // debugInfo("Rendering Nexus App for Chain Abstraction");
-            // render(NexusProviderApp);
-            // debugInfo("Nexus App rendered for Chain Abstraction");
-            // document.getElementById("nexus-button")?.click();
-            // // return originalRequest.apply(this, args);
-            // await new Promise((resolve) => {
-            //   setTimeout(() => {
-            //     debugInfo("Resolving after 1000ms");
-            //     resolve(true);
-            //   }, 100000);
-            // });
-
-            try {
-              const execResult = await window.nexus.bridgeAndExecute({
-                token: "USDC",
-                amount: "5",
-                toChainId: SUPPORTED_CHAINS.ARBITRUM,
-                execute: {
-                  buildFunctionParams: (token, amount, _chainId, user) => {
-                    const decimals = TOKEN_METADATA[token].decimals;
-                    const amountWei = parseUnits(amount, decimals);
-                    debugInfo("Building function params:", {
-                      TOKEN_CONTRACT_ADDRESSES,
+            function NexusApp() {
+              const { setProvider, initializeSdk } = useNexus();
+              const buttonRef = useRef<HTMLButtonElement>(null);
+              setProvider(window.nexus.getEVMProviderWithCA());
+              useEffect(() => {
+                // initializeSdk(window.nexus.getEVMProviderWithCA()).then(() => {
+                if (buttonRef.current) {
+                  buttonRef.current.click();
+                }
+                // });
+              }, []);
+              return (
+                <BridgeAndExecuteButton
+                  contractAddress={decodedData.args![0] as `0x${string}`}
+                  contractAbi={erc20Abi}
+                  functionName={decodedData.functionName}
+                  prefill={{
+                    toChainId: SUPPORTED_CHAINS.ARBITRUM,
+                    token:
+                      TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][
+                        tokenAddress.toLowerCase()
+                      ].symbol,
+                    amount: new Decimal(amount)
+                      .div(
+                        Decimal.pow(
+                          10,
+                          TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][tokenAddress]
+                            .decimals
+                        )
+                      )
+                      .toFixed(),
+                  }}
+                  buildFunctionParams={(token, amount, _chainId, user) => {
+                    debugInfo(
+                      "buildFunctionParams",
                       token,
+                      amount,
                       _chainId,
-                    });
-                    const tokenAddr =
-                      TOKEN_CONTRACT_ADDRESSES["USDC"][_chainId];
-                    return { functionParams: [tokenAddr, amountWei, user, 0] };
-                  },
-                  contractAddress: "0x2df1c51e09aecf9cacb7bc98cb1742757f163df7",
-                  contractAbi: erc20Abi,
-                  functionName: "transfer",
-                },
-              });
-              debugInfo("Execution result:", execResult);
-            } catch (error) {
-              console.error("Error executing Nexus SDK:", error);
-              debugInfo(
-                "Nexus SDK execution failed, continuing without Chain Abstraction",
-                error
+                      user
+                    );
+                    const amountWei = parseUnits(
+                      amount,
+                      TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][tokenAddress]
+                        .decimals
+                    );
+                    return {
+                      functionParams: [tokenAddress, amountWei],
+                    };
+                  }}
+                >
+                  {({ onClick, isLoading, disabled }) => (
+                    <button
+                      id="nexus-button"
+                      onClick={onClick}
+                      disabled={disabled || isLoading}
+                      ref={buttonRef}
+                      style={{ opacity: 0 }}
+                    >
+                      {isLoading
+                        ? "Processing…"
+                        : "Bridge & Supply to Hyperliquid"}
+                    </button>
+                  )}
+                </BridgeAndExecuteButton>
               );
             }
+            function NexusProviderApp() {
+              return (
+                <NexusProvider
+                  config={{
+                    debug: true,
+                    network: "mainnet",
+                  }}
+                >
+                  <NexusApp />
+                </NexusProvider>
+              );
+            }
+            render(NexusProviderApp);
+            document.getElementById("nexus-button")?.click();
+            // return originalRequest.apply(this, args);
+            isNexusRequest = true;
+
+            // try {
+            //   const execResult = await window.nexus.bridgeAndExecute({
+            //     token: "USDC",
+            //     amount: "5",
+            //     toChainId: SUPPORTED_CHAINS.ARBITRUM,
+            //     execute: {
+            //       buildFunctionParams: (token, amount, _chainId, user) => {
+            //         const decimals = TOKEN_METADATA[token].decimals;
+            //         const amountWei = parseUnits(amount, decimals);
+            //         const tokenAddr =
+            //           TOKEN_CONTRACT_ADDRESSES["USDC"][_chainId];
+            //         return { functionParams: [tokenAddr, amountWei, user, 0] };
+            //       },
+            //       contractAddress: "0x2df1c51e09aecf9cacb7bc98cb1742757f163df7",
+            //       contractAbi: erc20Abi,
+            //       functionName: "transfer",
+            //     },
+            //   });
+            // } catch (error) {
+            //   console.error("Error executing Nexus SDK:", error);
+            //   debugInfo(
+            //     "Nexus SDK execution failed, continuing without Chain Abstraction",
+            //     error
+            //   );
+            // }
           }
         }
-        return originalRequest.apply(this, args);
+        if (!isNexusRequest) {
+          return originalRequest.apply(this, args);
+        }
       };
 
       if (provider.isConnected) {
-        debugInfo("Provider supports isConnected method", provider);
         const originalIsConnected = provider.isConnected;
         provider.isConnected = async function (...args) {
           const isConnected = await originalIsConnected.apply(this, args);
-          debugInfo("Provider isConnected result:", isConnected);
-          debugInfo("Provider:", provider);
-          if (isConnected) {
+          if (isConnected && !initialized) {
             try {
-              debugInfo("Initializing Nexus SDK");
               window.nexus.initialize(provider);
+              fetchUnifiedBalances();
+              initialized = true;
             } catch (error) {
-              console.error("Error initializing Nexus SDK:", error);
               debugInfo(
                 "Nexus SDK initialization failed, continuing without Chain Abstraction",
                 error
