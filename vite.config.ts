@@ -43,8 +43,9 @@ export default defineConfig({
       watchFilePaths: ["package.json", "manifest.json"],
       browser: process.env.TARGET || "chrome",
       additionalInputs: [
-        "src/injected/nexusCA.ts",
+        "src/injected/nexusCA.tsx",
         "src/injected/networkInterceptor.ts",
+        "src/injected/domModifier.ts",
       ],
     }),
     nodePolyfillsFix({

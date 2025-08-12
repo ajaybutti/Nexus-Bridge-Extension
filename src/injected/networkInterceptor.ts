@@ -83,12 +83,19 @@ function injectNetworkInterceptor() {
                 return;
               }
               const asset = unifiedBalances[index];
+              const actualAsset = asset.breakdown.find(
+                (token) =>
+                  token.contractAddress.toLowerCase() ===
+                  param.target.toLowerCase()
+              );
               decodedResult[pIndex].returnData = encodeFunctionResult({
                 abi: MulticallAbi,
                 functionName: "balanceOf",
                 result: BigInt(
                   new Decimal(asset.balance)
-                    .mul(Decimal.pow(10, asset.decimals))
+                    .mul(
+                      Decimal.pow(10, actualAsset!.decimals || asset.decimals)
+                    )
                     .floor()
                     .toFixed()
                 ),

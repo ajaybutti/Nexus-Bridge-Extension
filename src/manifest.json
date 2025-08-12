@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "all_frames": false,
-      "js": ["src/content-script.ts"],
+      "js": ["src/contentScript.tsx"],
       "matches": ["<all_urls>"],
       "run_at": "document_start"
     }
@@ -33,7 +33,8 @@
     {
       "resources": [
         "src/injected/nexusCA.js",
-        "src/injected/networkInterceptor.js"
+        "src/injected/networkInterceptor.js",
+        "src/injected/domModifier.js"
       ],
       "matches": ["https://app.hyperliquid.xyz/*"]
     }

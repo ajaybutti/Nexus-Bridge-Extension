@@ -16,6 +16,7 @@ Browser.runtime
     if (response.enabled) {
       injectProviderScript("src/injected/nexusCA.js");
       injectProviderScript("src/injected/networkInterceptor.js");
+      injectProviderScript("src/injected/domModifier.js");
     }
   })
   .catch((error) => {
