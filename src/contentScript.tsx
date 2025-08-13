@@ -9,10 +9,15 @@ const injectProviderScript = (injectionUrl: string) => {
   ele.remove();
 };
 
+const localState = {
+  chainAbstractionStatus: false,
+};
+
 Browser.runtime
   .sendMessage({ type: "getChainAbstractionEnabled" })
   .then((response: any) => {
     console.log("Chain abstraction state:", response);
+    localState.chainAbstractionStatus = response.enabled;
     if (response.enabled) {
       injectProviderScript("src/injected/nexusCA.js");
       injectProviderScript("src/injected/networkInterceptor.js");
@@ -22,3 +27,11 @@ Browser.runtime
   .catch((error) => {
     console.error("Error fetching chain abstraction state:", error);
   });
+
+Browser.runtime.onMessage.addListener(
+  (event: any, sender: any, sendResponse) => {
+    console.log("MESSAGE FROM RUNTIME", event);
+    sendResponse(localState.chainAbstractionStatus);
+    return true;
+  }
+);

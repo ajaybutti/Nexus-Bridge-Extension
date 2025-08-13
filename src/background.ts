@@ -11,7 +11,14 @@ Browser.runtime.onMessage.addListener(async (message: any) => {
     console.log("Chain abstraction state changed:", message.enabled);
     Browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
       if (tabs && tabs[0]) {
-        Browser.tabs.reload(tabs[0].id!);
+        Browser.tabs
+          .sendMessage(tabs[0].id!, "getCurrentChainAbstractionStatus")
+          .then((currentStatus) => {
+            console.log("status", currentStatus, message.enabled);
+            if (currentStatus !== message.enabled) {
+              Browser.tabs.reload(tabs[0].id!);
+            }
+          });
       }
     });
   }

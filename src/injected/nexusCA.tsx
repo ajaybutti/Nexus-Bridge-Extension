@@ -64,6 +64,7 @@ function render(App: React.FC) {
   fixAppModal();
 
   try {
+    debugInfo("RENDERING APP");
     reactRoot.render(<App />);
   } catch (e) {
     debugInfo("ERROR RENDERING APP", e);
@@ -77,7 +78,7 @@ function fixAppModal() {
 }
 
 function NexusApp() {
-  const { initializeSdk, isSdkInitialized, sdk, deinitializeSdk } = useNexus();
+  const { initializeSdk, isSdkInitialized, sdk } = useNexus();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const [state, setState] = useState({
@@ -125,127 +126,101 @@ function NexusApp() {
         });
       });
       provider.provider.on("disconnect", (event) => {
-        deinitializeSdk();
+        // deinitializeSdk();
         setSelectedProvider(null);
         clearCache();
       });
-    }
-  }, []);
 
-  for (const provider of providers) {
-    const originalRequest = provider.provider.request;
-    provider.provider.request = async function (...args) {
-      debugInfo("Intercepted in useEffect", ...args);
-      let isNexusRequest = false;
-      const { method, params } = args[0] as {
-        method: string;
-        params?: any[];
-      };
-      debugInfo("Intercepted request:", method, params, provider.provider);
-      if (["eth_requestAccounts", "eth_accounts"].includes(method)) {
-        const res = await originalRequest.apply(this, args);
-        if (res && !isSdkInitialized) {
-          try {
-            initializeSdk(provider.provider).then(() => {
-              setSelectedProvider(provider.provider);
-              fetchUnifiedBalances();
+      const originalRequest = provider.provider.request;
+      debugInfo("Adding Request Interceptor", provider);
+      provider.provider.request = async function (...args) {
+        debugInfo("Intercepted in useEffect", ...args);
+        let isNexusRequest = false;
+        const { method, params } = args[0] as {
+          method: string;
+          params?: any[];
+        };
+        debugInfo("Intercepted request:", method, params, provider.provider);
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].data.toLowerCase().startsWith("0xa9059cbb") || // ERC20 transfer
+            params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
+        ) {
+          const unifiedBalances = await fetchUnifiedBalances();
+          const tokenAddress = params[0].to.toLowerCase();
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) => token.contractAddress.toLowerCase() === tokenAddress
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) => token.contractAddress.toLowerCase() === tokenAddress
+          );
+          const decodedData = decodeFunctionData({
+            abi: erc20TransferAbi,
+            data: params[0].data,
+          });
+
+          const amount = params[0].data.toLowerCase().startsWith("0xa9059cbb")
+            ? (decodedData.args![1] as bigint).toString()
+            : (decodedData.args![2] as bigint).toString();
+
+          const contractAddress = params[0].data
+            .toLowerCase()
+            .startsWith("0xa9059cbb")
+            ? (decodedData.args![1] as string)
+            : (decodedData.args![2] as string);
+
+          debugInfo("amount decoded:", amount);
+          debugInfo("actual contract:", decodedData.args![0]);
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(amount)
+          ) {
+            isNexusRequest = true;
+            setState({
+              contractAbi: erc20Abi,
+              contractAddress,
+              tokenAddress,
+              functionName: decodedData.functionName,
+              chainId: SUPPORTED_CHAINS.ARBITRUM,
+              amount,
+              buildFunctionParams(token, amount, _chainId, user) {
+                const actualAmount = parseUnits(amount, actualToken!.decimals);
+                debugInfo(
+                  "actual",
+                  actualAmount,
+                  tokenAddress,
+                  contractAddress,
+                  [tokenAddress, actualAmount]
+                );
+                return {
+                  functionParams: [tokenAddress, actualAmount],
+                };
+              },
             });
-          } catch (error) {
-            debugInfo(
-              "Nexus SDK initialization failed, continuing without Chain Abstraction",
-              error
-            );
           }
         }
-        return res;
-      }
-      if (
-        method === "eth_sendTransaction" &&
-        params?.[0] &&
-        (params[0].data.toLowerCase().startsWith("0xa9059cbb") || // ERC20 transfer
-          params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
-      ) {
-        const unifiedBalances = await fetchUnifiedBalances();
-        const tokenAddress = params[0].to.toLowerCase();
-        const tokenIndex = unifiedBalances.findIndex((bal) =>
-          bal.breakdown.find(
-            (token) => token.contractAddress.toLowerCase() === tokenAddress
-          )
-        );
-        if (tokenIndex === -1) {
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].data.toLowerCase().startsWith("0xa9059cbb") || // ERC20 transfer
+            params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
+        ) {
+        }
+        debugInfo("isNexusRequest", isNexusRequest);
+        if (!isNexusRequest) {
           return originalRequest.apply(this, args);
         }
-        const actualToken = unifiedBalances[tokenIndex].breakdown.find(
-          (token) => token.contractAddress.toLowerCase() === tokenAddress
-        );
-        const decodedData = decodeFunctionData({
-          abi: erc20TransferAbi,
-          data: params[0].data,
-        });
-
-        const amount = params[0].data.toLowerCase().startsWith("0xa9059cbb")
-          ? (decodedData.args![1] as bigint).toString()
-          : (decodedData.args![2] as bigint).toString();
-
-        const contractAddress = params[0].data
-          .toLowerCase()
-          .startsWith("0xa9059cbb")
-          ? (decodedData.args![1] as string)
-          : (decodedData.args![2] as string);
-
-        debugInfo("amount decoded:", amount);
-        debugInfo("actual contract:", decodedData.args![0]);
-
-        if (
-          new Decimal(actualToken?.balance || "0")
-            .mul(Decimal.pow(10, actualToken?.decimals || 0))
-            .lessThan(amount)
-        ) {
-          isNexusRequest = true;
-          setState({
-            contractAbi: erc20Abi,
-            contractAddress,
-            tokenAddress,
-            functionName: decodedData.functionName,
-            chainId: SUPPORTED_CHAINS.ARBITRUM,
-            amount,
-            buildFunctionParams(token, amount, _chainId, user) {
-              const actualAmount = parseUnits(amount, actualToken!.decimals);
-              return {
-                functionParams: [contractAddress, actualAmount],
-              };
-            },
-          });
-        }
-      }
-      debugInfo("isNexusRequest", isNexusRequest);
-      if (!isNexusRequest) {
-        return originalRequest.apply(this, args);
-      }
-    };
-
-    if (provider.provider.isConnected) {
-      const originalIsConnected = provider.provider.isConnected;
-      provider.provider.isConnected = async function (...args) {
-        debugInfo("selectedProvider.isConnected intercepted");
-        const isConnected = await originalIsConnected.apply(this, args);
-        if (isConnected && !isSdkInitialized) {
-          try {
-            initializeSdk(provider.provider).then(() => {
-              setSelectedProvider(provider.provider);
-              fetchUnifiedBalances();
-            });
-          } catch (error) {
-            debugInfo(
-              "Nexus SDK initialization failed, continuing without Chain Abstraction",
-              error
-            );
-          }
-        }
-        return isConnected;
       };
     }
-  }
+  }, []);
 
   useEffect(() => {
     // @ts-ignore
@@ -316,6 +291,7 @@ function NexusProviderApp() {
         debug: true,
         network: "mainnet",
       }}
+      disableCollapse={true}
     >
       <NexusApp />
     </NexusProvider>

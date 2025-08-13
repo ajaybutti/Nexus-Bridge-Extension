@@ -15,24 +15,24 @@ export default function () {
         "chainAbstractionEnabled"
       );
       console.log("storage", storage, storage.chainAbstractionEnabled);
+      Browser.runtime.sendMessage({
+        type: "chainAbstractionStateChanged",
+        enabled: storage.chainAbstractionEnabled || false,
+      });
       setSwitchState((storage.chainAbstractionEnabled as boolean) || false);
     };
 
     checkChainAbstractionEnabled();
   }, []);
 
-  useEffect(() => {
-    console.log("switch state changed", switchState);
-    Browser.storage.local.set({
-      chainAbstractionEnabled: switchState,
+  async function handleChange() {
+    await Browser.storage.local.set({
+      chainAbstractionEnabled: !switchState,
     });
     Browser.runtime.sendMessage({
       type: "chainAbstractionStateChanged",
-      enabled: switchState,
+      enabled: !switchState,
     });
-  }, [switchState]);
-
-  async function handleChange() {
     setSwitchState(!switchState);
   }
 
