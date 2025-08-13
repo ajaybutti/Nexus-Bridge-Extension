@@ -18,6 +18,10 @@ if (window.nexus) {
     });
 }
 
+export function clearCache() {
+  window.nexusCache = new Map();
+}
+
 export async function fetchUnifiedBalances() {
   if (window.nexusCache.has("unifiedBalances")) {
     const cached = window.nexusCache.get("unifiedBalances");
