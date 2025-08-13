@@ -28,7 +28,7 @@ function injectDomModifier() {
               }
             }
           }
-          if (element.innerHTML.includes("USDC.e")) {
+          if (element.innerHTML.includes("USDC")) {
             for (
               let i = 0;
               i < element.children[0].children[0].children.length;
@@ -37,7 +37,7 @@ function injectDomModifier() {
               const child = element.children[0].children[0].children[
                 i
               ] as HTMLElement;
-              if (child.innerHTML.includes("USDC.e")) {
+              if (child.innerText !== "USDC" && child.innerText !== "USDT") {
                 hideElement(child);
               }
             }

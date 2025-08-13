@@ -14,7 +14,7 @@ if (window.nexus) {
     .then((balances) => {
       window.nexusCache.set(cacheKeys.UNIFIED_BALANCES, {
         balances,
-        expiry: Date.now() + 120000, // Cache for 2 minutes
+        expiry: Date.now() + 30000, // Cache for 30 seconds
       });
       debugInfo("Unified balances cached:", balances);
     })

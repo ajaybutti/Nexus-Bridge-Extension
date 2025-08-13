@@ -1,3 +1,5 @@
+import { erc20Abi } from "viem";
+
 export const MulticallAddress = "0xca11bde05977b3631167028862be2a173976ca11";
 
 export const MulticallAbi = [
