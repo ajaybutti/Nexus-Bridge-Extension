@@ -6,7 +6,6 @@ import {
 import { debugInfo } from "../utils/debug";
 import Decimal from "decimal.js";
 import {
-  Abi,
   decodeFunctionData,
   decodeFunctionResult,
   encodeFunctionResult,
@@ -106,7 +105,7 @@ function NexusApp() {
     ) {
       const t = TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][token];
       const amt = parseUnits(amount, t.decimals);
-      return { functionParams: [token, amt] as any[] };
+      return { functionParams: [token, amt] as any[] | readonly any[] };
     },
   });
 
@@ -201,15 +200,9 @@ function NexusApp() {
               chainId: SUPPORTED_CHAINS.ARBITRUM,
               amount,
               buildFunctionParams() {
-                const actualAmount = parseUnits(amount, actualToken!.decimals);
-                debugInfo(
-                  "actual params",
-                  actualAmount,
-                  actualToken?.decimals,
-                  amount
-                );
+                debugInfo("actual params", decodedData.args);
                 return {
-                  functionParams: [contractAddress, actualAmount],
+                  functionParams: decodedData.args!,
                 };
               },
             });
@@ -227,7 +220,51 @@ function NexusApp() {
             abi: LifiAbi,
             data: params[0].data,
           });
-          debugInfo("LIFI DECODED", decodedData);
+          debugInfo(
+            "LIFI DECODED",
+            decodedData.args[5].fromAmount,
+            decodedData.args[5].sendingAssetId
+          );
+          const paramAmount = decodedData.args[5].fromAmount.toString();
+          const tokenAddress = decodedData.args[5].sendingAssetId.toLowerCase();
+
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) => token.contractAddress.toLowerCase() === tokenAddress
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) => token.contractAddress.toLowerCase() === tokenAddress
+          );
+          const amount = new Decimal(paramAmount)
+            .div(Decimal.pow(10, actualToken?.decimals || 0))
+            .toFixed();
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(paramAmount)
+          ) {
+            isNexusRequest = true;
+            setState({
+              // @ts-expect-error
+              contractAbi: LifiAbi,
+              contractAddress: lifiContractAddress,
+              tokenAddress,
+              functionName: decodedData.functionName,
+              chainId: SUPPORTED_CHAINS.ARBITRUM,
+              amount,
+              buildFunctionParams() {
+                debugInfo("actual params", decodedData.args);
+                return {
+                  functionParams: decodedData.args,
+                };
+              },
+            });
+          }
         }
 
         if (
