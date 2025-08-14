@@ -87,7 +87,7 @@ function fixAppModal() {
 }
 
 function NexusApp() {
-  const { initializeSdk, isSdkInitialized, sdk } = useNexus();
+  const { initializeSdk, isSdkInitialized, sdk, deinitializeSdk } = useNexus();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const [state, setState] = useState({
@@ -114,22 +114,29 @@ function NexusApp() {
     for (const provider of providers) {
       if (provider.provider.selectedAddress) {
         initializeSdk(provider.provider).then(() => {
+          debugInfo("SDK INITIALIZED 1", isSdkInitialized);
           fetchUnifiedBalances();
         });
       }
       provider.provider.on("accountsChanged", (event) => {
-        initializeSdk(provider.provider).then(() => {
-          fetchUnifiedBalances();
-        });
+        debugInfo("ON ACCOUNT CHANGED", event);
+        if (event.length) {
+          initializeSdk(provider.provider).then(() => {
+            debugInfo("SDK INITIALIZED 2", event, isSdkInitialized);
+            fetchUnifiedBalances();
+          });
+        } else {
+          debugInfo("SDK DEINITALIZED", event);
+          deinitializeSdk();
+          clearCache();
+        }
       });
       provider.provider.on("connect", (event) => {
+        debugInfo("ON CONNECT");
         initializeSdk(provider.provider).then(() => {
+          debugInfo("SDK INITIALIZED 3", event, isSdkInitialized);
           fetchUnifiedBalances();
         });
-      });
-      provider.provider.on("disconnect", (event) => {
-        // deinitializeSdk();
-        clearCache();
       });
 
       const originalRequest = provider.provider.request;
@@ -142,6 +149,13 @@ function NexusApp() {
           params?: any[];
         };
         debugInfo("Intercepted request:", method, params, provider.provider);
+        if (
+          method === "eth_call" &&
+          params?.[0] &&
+          params[0].data.toLowerCase().startsWith("0x70a08231")
+        ) {
+          debugInfo("BALANCE OF CALLED INSIDE REQUEST", params);
+        }
         if (
           method === "eth_sendTransaction" &&
           params?.[0] &&
@@ -366,6 +380,7 @@ function NexusApp() {
   }, [sdk]);
 
   useEffect(() => {
+    debugInfo("SDK INIT RETURN", Date.now());
     debugInfo("isSdkInitialized", isSdkInitialized);
   }, [isSdkInitialized]);
 
