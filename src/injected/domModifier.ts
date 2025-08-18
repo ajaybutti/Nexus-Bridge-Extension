@@ -27,8 +27,7 @@ function injectDomModifier() {
                 hideElement(child);
               }
             }
-          }
-          if (element.innerHTML.includes("USDC")) {
+          } else if (element.innerHTML.includes("USDC")) {
             for (
               let i = 0;
               i < element.children[0].children[0].children.length;
