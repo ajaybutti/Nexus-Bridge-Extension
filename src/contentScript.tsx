@@ -13,6 +13,21 @@ const localState = {
   chainAbstractionStatus: false,
 };
 
+// Listen for provider updates from the page context (injected script)
+window.addEventListener("message", (event: MessageEvent) => {
+  if (event.source !== window) return;
+  const data = event.data as any;
+  if (!data || data.type !== "NEXUS_PROVIDER_UPDATE") return;
+  try {
+    Browser.storage.local.set({
+      nexusProviderName: data.providerName ?? null,
+      nexusProviderIcon: data.providerIcon ?? null,
+    });
+  } catch (e) {
+    console.debug("Failed to persist provider name", e);
+  }
+});
+
 Browser.runtime
   .sendMessage({ type: "getChainAbstractionEnabled" })
   .then((response: any) => {

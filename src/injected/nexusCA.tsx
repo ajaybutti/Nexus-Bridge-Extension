@@ -1,5 +1,13 @@
-import { CA, Network, type EthereumProvider } from "@arcana/ca-sdk";
+import {
+  AllowanceHookSources,
+  CA,
+  Intent,
+  Network,
+  OnIntentHook,
+  type EthereumProvider,
+} from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
+// Rely on chrome.runtime global for MV3 to resolve stylesheet URL
 import Decimal from "decimal.js";
 import {
   decodeFunctionData,
@@ -12,10 +20,12 @@ import {
   MulticallAddress,
 } from "../utils/multicall";
 import { createRoot, Root } from "react-dom/client";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { TOKEN_MAPPING } from "../utils/constants";
 import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
+import IntentModal from "../components/intent-modal";
+import AllowanceModal from "../components/allowance-modal";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -25,6 +35,7 @@ type EVMProvider = EthereumProvider & {
 const providers = [] as {
   info: {
     name: string;
+    icon?: string;
   };
   provider: EVMProvider;
 }[];
@@ -41,17 +52,31 @@ window.addEventListener("eip6963:announceProvider", (event: any) => {
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 
 let reactRoot: Root;
+let reactRootElement: Element | null = null;
 
 function render(App: React.FC) {
-  const nexusRoot = document.getElementById("nexus-root");
-  if (!nexusRoot) {
-    const newNexusRoot = document.createElement("div");
-    newNexusRoot.id = "nexus-root";
-    document.body.appendChild(newNexusRoot);
+  // Create a Shadow DOM host to avoid leaking styles into the dApp and vice-versa
+  let host = document.getElementById("nexus-root-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "nexus-root-host";
+    const shadow = host.attachShadow({ mode: "open" });
+    // Attach Tailwind build into shadow root if available
+    // Note: Tailwind v4 in JIT auto mode doesn't need a global stylesheet. If you later
+    // prebuild a CSS file for injected UI, append it here into shadow
+    const root = document.createElement("div");
+    root.id = "nexus-root";
+    shadow.appendChild(root);
+    document.body.appendChild(host);
+    reactRootElement = root;
   }
 
   if (!reactRoot) {
-    reactRoot = createRoot(document.getElementById("nexus-root")!);
+    if (!reactRootElement) {
+      const shadow = (host as any).shadowRoot as ShadowRoot | null;
+      reactRootElement = shadow?.getElementById("nexus-root") || null;
+    }
+    reactRoot = createRoot(reactRootElement!);
   }
 
   fixAppModal();
@@ -77,10 +102,30 @@ function NexusApp() {
   const ca = new CA({
     network: Network.CORAL,
     debug: true,
-    // Add SIWE statement below
-    // siweStatement: ""
+    siweStatement: "Sign in to experience Nexus effect",
   });
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [intent, setIntent] = useState<{
+    intent: Intent;
+    allow: () => void;
+    deny: () => void;
+    refresh: () => Promise<Intent>;
+  } | null>(null);
+
+  const [allowance, setAllowance] = useState<{
+    allow: (s: Array<"max" | "min" | bigint | string>) => void;
+    deny: () => void;
+    sources: AllowanceHookSources;
+  } | null>(null);
+
+  ca.setOnIntentHook(({ intent, allow, deny, refresh }) => {
+    debugInfo("ON INTENT HOOK", { intent, allow, deny, refresh });
+    setIntent({ intent, allow, deny, refresh });
+  });
+
+  ca.setOnAllowanceHook(({ allow, deny, sources }) => {
+    debugInfo("ON ALLOWANCE HOOK", { allow, deny, sources });
+    setAllowance({ allow, deny, sources });
+  });
 
   useEffect(() => {
     debugInfo("Detected Providers", providers);
@@ -90,6 +135,17 @@ function NexusApp() {
         ca.init().then(() => {
           window.nexus = ca;
           fetchUnifiedBalances();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: provider.info.name,
+                walletAddress: provider.provider.selectedAddress,
+                providerIcon: provider.info.icon ?? null,
+              },
+              "*"
+            );
+          } catch {}
         });
       }
       provider.provider.on("accountsChanged", (event) => {
@@ -99,10 +155,32 @@ function NexusApp() {
           ca.init().then(() => {
             window.nexus = ca;
             fetchUnifiedBalances();
+            try {
+              window.postMessage(
+                {
+                  type: "NEXUS_PROVIDER_UPDATE",
+                  providerName: provider.info.name,
+                  walletAddress: provider.provider.selectedAddress,
+                  providerIcon: provider.info.icon ?? null,
+                },
+                "*"
+              );
+            } catch {}
           });
         } else {
           ca.deinit();
           clearCache();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: null,
+                walletAddress: null,
+                providerIcon: null,
+              },
+              "*"
+            );
+          } catch {}
         }
       });
       provider.provider.on("connect", (event) => {
@@ -111,6 +189,17 @@ function NexusApp() {
         ca.init().then(() => {
           window.nexus = ca;
           fetchUnifiedBalances();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: provider.info.name,
+                walletAddress: provider.provider.selectedAddress,
+                providerIcon: provider.info.icon ?? null,
+              },
+              "*"
+            );
+          } catch {}
         });
       });
 
@@ -346,11 +435,15 @@ function NexusApp() {
     }
   }, []);
 
-  return window.nexus ? (
-    <div />
-  ) : (
-    // Insert Bridging UI here
-    <div />
+  return (
+    <>
+      {intent && (
+        <IntentModal intentModal={intent} setIntentModal={setIntent} />
+      )}
+      {allowance && (
+        <AllowanceModal allowance={allowance} setAllowance={setAllowance} />
+      )}
+    </>
   );
 }
 
