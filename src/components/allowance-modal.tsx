@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import type { AllowanceHookSources } from "@arcana/ca-sdk";
+import Decimal from "decimal.js";
 
 export type AllowanceModalProps = {
   allowance: {
@@ -93,48 +94,58 @@ export default function AllowanceModal({
 }: AllowanceModalProps) {
   const rows = useMemo(() => {
     if (!allowance) return [] as React.ReactNode[];
-    return allowance.sources.map((s, idx) => (
-      <div key={idx} style={pill}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {s.chain.logo ? (
-            <img
-              src={s.chain.logo}
-              width={18}
-              height={18}
-              style={{ borderRadius: 9999 }}
-              onError={(e) => (e.currentTarget.style.display = "none")}
-            />
-          ) : null}
+
+    return allowance.sources.map((s, idx) => {
+      const currentAllowance = new Decimal(s.allowance.current)
+        .div(Decimal.pow(10, 6))
+        .toFixed();
+      const requiredAllowance = new Decimal(s.allowance.minimum)
+        .div(Decimal.pow(10, 6))
+        .toFixed();
+
+      return (
+        <div key={idx} style={pill}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {s.chain.logo ? (
+              <img
+                src={s.chain.logo}
+                width={18}
+                height={18}
+                style={{ borderRadius: 9999 }}
+                onError={(e) => (e.currentTarget.style.display = "none")}
+              />
+            ) : null}
+            <div
+              style={{
+                fontSize: 12,
+                color: "#cbd5e1",
+                fontFamily:
+                  "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
+              }}
+            >
+              {s.chain.name}
+            </div>
+          </div>
           <div
             style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
               fontSize: 12,
-              color: "#cbd5e1",
               fontFamily:
                 "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
             }}
           >
-            {s.chain.name}
+            <div style={{ color: "#9ca3af" }}>
+              Current allowance: {String(currentAllowance)}
+            </div>
+            <div style={{ fontWeight: 700 }}>
+              Required: {String(requiredAllowance)}
+            </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-            fontSize: 12,
-            fontFamily:
-              "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
-          }}
-        >
-          <div style={{ color: "#9ca3af" }}>
-            Current allowance: {String(s.allowance.current)}
-          </div>
-          <div style={{ fontWeight: 700 }}>
-            Required: {String(s.allowance.minimum)}
-          </div>
-        </div>
-      </div>
-    ));
+      );
+    });
   }, [allowance]);
 
   if (!allowance) return null;
