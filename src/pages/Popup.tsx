@@ -4,6 +4,11 @@ import Browser from "webextension-polyfill";
 
 export default function () {
   const [switchState, setSwitchState] = useState(false);
+  const [provider, setProvider] = useState<{
+    name: string;
+    icon: string;
+    walletAddress: string;
+  } | null>(null);
 
   function getSwitchStateText() {
     return switchState ? "ON" : "OFF";
@@ -11,29 +16,66 @@ export default function () {
 
   useEffect(() => {
     const checkChainAbstractionEnabled = async () => {
-      const storage = await Browser.storage.local.get(
-        "chainAbstractionEnabled"
-      );
+      const storage = await Browser.storage.local.get([
+        "chainAbstractionEnabled",
+        "nexusProviderName",
+        "nexusProviderIcon",
+        "nexusWalletAddress",
+      ]);
       console.log("storage", storage, storage.chainAbstractionEnabled);
       Browser.runtime.sendMessage({
         type: "chainAbstractionStateChanged",
         enabled: storage.chainAbstractionEnabled || false,
       });
       setSwitchState((storage.chainAbstractionEnabled as boolean) || false);
+      setProvider({
+        name: storage.nexusProviderName as string,
+        icon: storage.nexusProviderIcon as string,
+        walletAddress: storage.nexusWalletAddress as string,
+      });
     };
 
     checkChainAbstractionEnabled();
+    const onChanged = (
+      changes: { [key: string]: { oldValue?: unknown; newValue?: unknown } },
+      areaName: string
+    ) => {
+      if (areaName !== "local") return;
+      if (changes.nexusProviderName) {
+        setProvider({
+          name: changes.nexusProviderName.newValue as string,
+          icon: changes.nexusProviderIcon.newValue as string,
+          walletAddress: changes.nexusWalletAddress.newValue as string,
+        });
+      }
+      if (changes.nexusProviderIcon) {
+        setProvider({
+          name: changes.nexusProviderName.newValue as string,
+          icon: changes.nexusProviderIcon.newValue as string,
+          walletAddress: changes.nexusWalletAddress.newValue as string,
+        });
+      }
+    };
+    Browser.storage.onChanged.addListener(onChanged as any);
+    return () => {
+      Browser.storage.onChanged.removeListener(onChanged as any);
+    };
   }, []);
 
   async function handleChange() {
+    const next = !switchState;
     await Browser.storage.local.set({
-      chainAbstractionEnabled: !switchState,
+      chainAbstractionEnabled: next,
+      ...(next ? {} : { nexusProviderName: null, nexusProviderIcon: null }),
     });
     Browser.runtime.sendMessage({
       type: "chainAbstractionStateChanged",
-      enabled: !switchState,
+      enabled: next,
     });
-    setSwitchState(!switchState);
+    setSwitchState(next);
+    if (!next) {
+      setProvider(null);
+    }
   }
 
   return (
@@ -59,8 +101,70 @@ export default function () {
         </svg>
       </label>
 
-      <div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "0.5rem",
+        }}
+      >
         <h1>Chain Abstraction is turned {getSwitchStateText()}</h1>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.6rem",
+            color: "#ddd",
+            fontSize: "0.95rem",
+            background: "#2a2a2a",
+            border: "1px solid #3a3a3a",
+            padding: "8px 12px",
+            borderRadius: 10,
+            minWidth: 220,
+            justifyContent: "center",
+          }}
+          title={provider?.name ?? undefined}
+        >
+          {provider?.icon ? (
+            // Many EIP-6963 providers expose data-URI icons; also support http(s)
+            <img
+              src={provider.icon}
+              alt={provider.name ?? "wallet"}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                boxShadow: "0 0 10px rgba(0,0,0,0.35)",
+                objectFit: "cover",
+                background: "#1f1f1f",
+              }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                background: "#1f1f1f",
+                border: "1px solid #3a3a3a",
+              }}
+            />
+          )}
+          <span style={{ opacity: 0.9, fontSize: "0.9rem" }}>
+            {provider?.name
+              ? `Connected wallet: ${provider.name}`
+              : "No wallet connected"}
+          </span>
+          {provider?.walletAddress && (
+            <span style={{ opacity: 0.9, fontSize: "0.9rem" }}>
+              Address: {provider.walletAddress}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
