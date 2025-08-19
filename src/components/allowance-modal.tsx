@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import type { AllowanceHookSources } from "@arcana/ca-sdk";
 import Decimal from "decimal.js";
+import Avail from "./avail";
 
 export type AllowanceModalProps = {
   allowance: {
@@ -17,24 +18,26 @@ const overlay: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   backdropFilter: "blur(2px)",
   display: "flex",
+  flexDirection: "column",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent: "space-between",
   zIndex: 2147483646,
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
 };
 
 const modal: React.CSSProperties = {
-  width: "28rem",
+  width: "540px",
   maxWidth: "65vw",
   color: "#e5e7eb",
-  padding: 16,
+  paddingTop: "16px",
   position: "relative",
   background: "rgb(15, 26, 31)",
   border: "1px solid rgb(39, 48, 53)",
   borderRadius: 16,
   maxHeight: "100%",
   overflow: "auto",
+  margin: "auto",
   boxSizing: "border-box",
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
@@ -130,6 +133,7 @@ export default function AllowanceModal({
             style={{
               display: "flex",
               flexDirection: "column",
+              alignItems: "flex-end",
               gap: 4,
               fontSize: 12,
               fontFamily:
@@ -157,54 +161,71 @@ export default function AllowanceModal({
         setAllowance(null);
       }}
     >
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 16,
-            marginBottom: 6,
-            fontFamily:
-              "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
-          }}
-        >
-          Approve Spend
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#9ca3af",
-            fontFamily:
-              "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
-          }}
-        >
-          We need approvals to proceed. Minimum approval is requested for each
-          source chain.
-        </div>
-        <div style={{ height: 12 }} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {rows}
-        </div>
-        <div style={{ height: 16 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            style={{ ...btnStyleMuted }}
-            onClick={() => {
-              allowance.deny();
-              setAllowance(null);
+      <div
+        style={modal}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div style={{ padding: "0px 16px" }}>
+          <div
+            style={{
+              fontWeight: 600,
+              fontSize: 16,
+              marginBottom: 6,
+              fontFamily:
+                "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
             }}
           >
-            Cancel
-          </button>
-          <button
-            style={{ ...btnStylePrimary }}
-            onClick={() => {
-              allowance.allow(["min"]);
-              setAllowance(null);
+            Approve Spend
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#9ca3af",
+              fontFamily:
+                "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
             }}
           >
-            Allow Min
-          </button>
+            We need approvals to proceed. Minimum approval is requested for each
+            source chain.
+          </div>
+          <div style={{ height: 12 }} />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              maxHeight: "200px",
+              overflowY: "scroll",
+              scrollbarWidth: "none",
+            }}
+          >
+            {rows}
+          </div>
+          <div style={{ height: 16 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              style={{ ...btnStyleMuted }}
+              onClick={() => {
+                allowance.deny();
+                setAllowance(null);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              style={{ ...btnStylePrimary }}
+              onClick={() => {
+                allowance.allow(["min"]);
+                setAllowance(null);
+              }}
+            >
+              Allow Min
+            </button>
+          </div>
         </div>
+        <Avail />
       </div>
     </div>
   );

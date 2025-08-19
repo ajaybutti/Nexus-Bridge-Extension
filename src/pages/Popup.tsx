@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./Popup.css";
 import Browser from "webextension-polyfill";
+import Avail from "../components/avail";
 
 export default function () {
   const [switchState, setSwitchState] = useState(false);
@@ -80,6 +81,7 @@ export default function () {
 
   return (
     <div className="popup-container">
+      <Avail disableTopBorder={true} />
       <input
         id="checkbox"
         type="checkbox"
@@ -127,7 +129,6 @@ export default function () {
           title={provider?.name ?? undefined}
         >
           {provider?.icon ? (
-            // Many EIP-6963 providers expose data-URI icons; also support http(s)
             <img
               src={provider.icon}
               alt={provider.name ?? "wallet"}

@@ -441,11 +441,7 @@ function NexusApp() {
 }
 
 function NexusProviderApp() {
-  return (
-    <div>
-      <NexusApp />
-    </div>
-  );
+  return <NexusApp />;
 }
 
 render(NexusProviderApp);
