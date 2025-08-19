@@ -80,6 +80,23 @@ export default function () {
 
   return (
     <div className="popup-container">
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <img
+          src="/icon-with-shadow.svg"
+          alt="logo"
+          style={{ width: 24, height: 24 }}
+        />
+        <h1 style={{ fontSize: "1.2rem", fontWeight: 600 }}>
+          Powered by Avail
+        </h1>
+      </div>
       <input
         id="checkbox"
         type="checkbox"
@@ -127,7 +144,6 @@ export default function () {
           title={provider?.name ?? undefined}
         >
           {provider?.icon ? (
-            // Many EIP-6963 providers expose data-URI icons; also support http(s)
             <img
               src={provider.icon}
               alt={provider.name ?? "wallet"}

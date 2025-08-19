@@ -7,8 +7,8 @@ function generateManifest() {
   const manifest = readJsonFile("src/manifest.json");
   const pkg = readJsonFile("package.json");
   return {
-    name: "Nexus Injection",
-    description: "Injects Nexus SDK into web3 pages",
+    name: "Nexus",
+    description: "Build once, scale everywhere",
     version: pkg.version,
     ...manifest,
   };

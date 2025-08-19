@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import type { Intent } from "@arcana/ca-sdk";
 
 export type IntentModalProps = {
@@ -97,18 +97,10 @@ const btnStyleMuted: React.CSSProperties = {
   borderColor: "#3b424f",
 };
 
-const btnStyleGhost: React.CSSProperties = {
-  ...btnBase,
-  background: "transparent",
-  color: "#9ca3af",
-  borderColor: "#2a2f3a",
-};
-
 export default function IntentModal({
   intentModal,
   setIntentModal,
 }: IntentModalProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const onClose = useCallback(() => {
     if (!intentModal) return;
     intentModal.deny();
@@ -116,28 +108,10 @@ export default function IntentModal({
   }, [intentModal, setIntentModal]);
 
   const handleAllow = useCallback(() => {
-    if (!intentModal || isRefreshing) return;
+    if (!intentModal) return;
     intentModal.allow();
     setIntentModal(null);
-  }, [intentModal, isRefreshing, setIntentModal]);
-
-  const handleRefresh = useCallback(async () => {
-    if (!intentModal) return;
-    setIsRefreshing(true);
-    try {
-      await intentModal.refresh();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [intentModal]);
-
-  useEffect(() => {
-    if (!intentModal) return;
-    const id = setInterval(() => {
-      handleRefresh();
-    }, 5000);
-    return () => clearInterval(id);
-  }, [intentModal, handleRefresh]);
+  }, [intentModal, setIntentModal]);
 
   const content = useMemo(() => {
     if (!intentModal) return null;
@@ -347,20 +321,13 @@ export default function IntentModal({
           <button onClick={onClose} style={btnStyleMuted}>
             Deny
           </button>
-          <button
-            onClick={handleAllow}
-            style={{ ...btnStylePrimary, opacity: isRefreshing ? 0.6 : 1 }}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? "Refreshing..." : "Allow"}
-          </button>
-          <button onClick={handleRefresh} style={btnStyleGhost}>
-            Refresh
+          <button onClick={handleAllow} style={{ ...btnStylePrimary }}>
+            Allow
           </button>
         </div>
       </div>
     );
-  }, [intentModal, isRefreshing, handleAllow, handleRefresh, onClose]);
+  }, [intentModal, handleAllow, onClose]);
 
   if (!intentModal) return null;
   return (
