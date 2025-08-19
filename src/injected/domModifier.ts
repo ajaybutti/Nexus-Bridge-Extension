@@ -1,5 +1,3 @@
-import { debugInfo } from "../utils/debug";
-
 const dropdownNode = "div.sc-bYMpWt.bSFGqc.dropper-select-list.variant_black";
 const titleNode = "div.sc-bjfHbI.lgpQZk.body18Regular";
 const dropdownParentNode = "div.sc-iJnaPW.bwRIip.variant_black";
@@ -16,9 +14,6 @@ function injectDomModifier() {
         mutation.addedNodes.length > 0 &&
         mutation.addedNodes[0] instanceof HTMLElement
       ) {
-        if (mutation.addedNodes[0].querySelector(".modal")) {
-          debugInfo("Mutation", mutation);
-        }
         if ((mutation.addedNodes[0] as HTMLElement).matches(dropdownNode)) {
           const element = mutation.addedNodes[0] as HTMLElement;
           if (element.innerHTML.includes("Arbitrum")) {
