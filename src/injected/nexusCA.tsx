@@ -3,7 +3,6 @@ import {
   CA,
   Intent,
   Network,
-  OnIntentHook,
   type EthereumProvider,
 } from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
@@ -26,6 +25,7 @@ import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
+import { setCAEvents, unsetCAEvents } from "./caEvents";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -98,6 +98,35 @@ function fixAppModal() {
     ?.setAttribute("style", "z-index: 40");
 }
 
+function initCA(
+  ca: CA,
+  provider: {
+    info: {
+      name: string;
+      icon?: string;
+    };
+    provider: EVMProvider;
+  }
+) {
+  ca.setEVMProvider(provider.provider);
+  ca.init().then(() => {
+    window.nexus = ca;
+    fetchUnifiedBalances();
+    setCAEvents(ca);
+    try {
+      window.postMessage(
+        {
+          type: "NEXUS_PROVIDER_UPDATE",
+          providerName: provider.info.name,
+          walletAddress: provider.provider.selectedAddress,
+          providerIcon: provider.info.icon ?? null,
+        },
+        "*"
+      );
+    } catch {}
+  });
+}
+
 function NexusApp() {
   const ca = new CA({
     network: Network.CORAL,
@@ -131,44 +160,15 @@ function NexusApp() {
     debugInfo("Detected Providers", providers);
     for (const provider of providers) {
       if (provider.provider.selectedAddress) {
-        ca.setEVMProvider(provider.provider);
-        ca.init().then(() => {
-          window.nexus = ca;
-          fetchUnifiedBalances();
-          try {
-            window.postMessage(
-              {
-                type: "NEXUS_PROVIDER_UPDATE",
-                providerName: provider.info.name,
-                walletAddress: provider.provider.selectedAddress,
-                providerIcon: provider.info.icon ?? null,
-              },
-              "*"
-            );
-          } catch {}
-        });
+        initCA(ca, provider);
       }
       provider.provider.on("accountsChanged", (event) => {
         debugInfo("ON ACCOUNT CHANGED", event);
         if (event.length) {
-          ca.setEVMProvider(provider.provider);
-          ca.init().then(() => {
-            window.nexus = ca;
-            fetchUnifiedBalances();
-            try {
-              window.postMessage(
-                {
-                  type: "NEXUS_PROVIDER_UPDATE",
-                  providerName: provider.info.name,
-                  walletAddress: provider.provider.selectedAddress,
-                  providerIcon: provider.info.icon ?? null,
-                },
-                "*"
-              );
-            } catch {}
-          });
+          initCA(ca, provider);
         } else {
           ca.deinit();
+          unsetCAEvents(ca);
           clearCache();
           try {
             window.postMessage(
@@ -185,22 +185,7 @@ function NexusApp() {
       });
       provider.provider.on("connect", (event) => {
         debugInfo("ON CONNECT", event);
-        ca.setEVMProvider(provider.provider);
-        ca.init().then(() => {
-          window.nexus = ca;
-          fetchUnifiedBalances();
-          try {
-            window.postMessage(
-              {
-                type: "NEXUS_PROVIDER_UPDATE",
-                providerName: provider.info.name,
-                walletAddress: provider.provider.selectedAddress,
-                providerIcon: provider.info.icon ?? null,
-              },
-              "*"
-            );
-          } catch {}
-        });
+        initCA(ca, provider);
       });
 
       const originalRequest = provider.provider.request;
@@ -314,9 +299,6 @@ function NexusApp() {
           const actualToken = unifiedBalances[tokenIndex].breakdown.find(
             (token) => token.contractAddress.toLowerCase() === tokenAddress
           );
-          const amount = new Decimal(paramAmount)
-            .div(Decimal.pow(10, actualToken?.decimals || 0))
-            .toFixed();
 
           if (
             new Decimal(actualToken?.balance || "0")
