@@ -1,34 +1,31 @@
 import {
-  EthereumProvider,
-  SUPPORTED_CHAINS,
-  SUPPORTED_CHAINS_IDS,
-} from "@avail-project/nexus/core";
+  AllowanceHookSources,
+  CA,
+  Intent,
+  Network,
+  OnIntentHook,
+  type EthereumProvider,
+} from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
+// Rely on chrome.runtime global for MV3 to resolve stylesheet URL
 import Decimal from "decimal.js";
 import {
   decodeFunctionData,
   decodeFunctionResult,
   encodeFunctionResult,
-  ethAddress,
-  parseUnits,
-  zeroAddress,
 } from "viem";
 import {
   erc20TransferAbi,
   MulticallAbi,
   MulticallAddress,
 } from "../utils/multicall";
-import {
-  BridgeAndExecuteButton,
-  NexusProvider,
-  useNexus,
-} from "@avail-project/nexus/ui";
 import { createRoot, Root } from "react-dom/client";
-import { erc20Abi } from "viem";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { TOKEN_MAPPING } from "../utils/constants";
 import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
+import IntentModal from "../components/intent-modal";
+import AllowanceModal from "../components/allowance-modal";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -38,6 +35,7 @@ type EVMProvider = EthereumProvider & {
 const providers = [] as {
   info: {
     name: string;
+    icon?: string;
   };
   provider: EVMProvider;
 }[];
@@ -54,17 +52,31 @@ window.addEventListener("eip6963:announceProvider", (event: any) => {
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 
 let reactRoot: Root;
+let reactRootElement: Element | null = null;
 
 function render(App: React.FC) {
-  const nexusRoot = document.getElementById("nexus-root");
-  if (!nexusRoot) {
-    const newNexusRoot = document.createElement("div");
-    newNexusRoot.id = "nexus-root";
-    document.body.appendChild(newNexusRoot);
+  // Create a Shadow DOM host to avoid leaking styles into the dApp and vice-versa
+  let host = document.getElementById("nexus-root-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "nexus-root-host";
+    const shadow = host.attachShadow({ mode: "open" });
+    // Attach Tailwind build into shadow root if available
+    // Note: Tailwind v4 in JIT auto mode doesn't need a global stylesheet. If you later
+    // prebuild a CSS file for injected UI, append it here into shadow
+    const root = document.createElement("div");
+    root.id = "nexus-root";
+    shadow.appendChild(root);
+    document.body.appendChild(host);
+    reactRootElement = root;
   }
 
   if (!reactRoot) {
-    reactRoot = createRoot(document.getElementById("nexus-root")!);
+    if (!reactRootElement) {
+      const shadow = (host as any).shadowRoot as ShadowRoot | null;
+      reactRootElement = shadow?.getElementById("nexus-root") || null;
+    }
+    reactRoot = createRoot(reactRootElement!);
   }
 
   fixAppModal();
@@ -87,55 +99,107 @@ function fixAppModal() {
 }
 
 function NexusApp() {
-  const { initializeSdk, isSdkInitialized, sdk, deinitializeSdk } = useNexus();
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const ca = new CA({
+    network: Network.CORAL,
+    debug: true,
+    siweStatement: "Sign in to experience Nexus effect",
+  });
+  const [intent, setIntent] = useState<{
+    intent: Intent;
+    allow: () => void;
+    deny: () => void;
+    refresh: () => Promise<Intent>;
+  } | null>(null);
 
-  const [state, setState] = useState({
-    contractAddress: zeroAddress as string,
-    contractAbi: erc20Abi,
-    functionName: "transfer",
-    chainId: 42161 as SUPPORTED_CHAINS_IDS,
-    tokenAddress: ethAddress as string,
-    amount: "1",
-    buildFunctionParams(
-      token: string,
-      amount: string,
-      _chainId: SUPPORTED_CHAINS_IDS,
-      user: string
-    ) {
-      const t = TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][token];
-      const amt = parseUnits(amount, t.decimals);
-      return { functionParams: [token, amt] as any[] | readonly any[] };
-    },
+  const [allowance, setAllowance] = useState<{
+    allow: (s: Array<"max" | "min" | bigint | string>) => void;
+    deny: () => void;
+    sources: AllowanceHookSources;
+  } | null>(null);
+
+  ca.setOnIntentHook(({ intent, allow, deny, refresh }) => {
+    debugInfo("ON INTENT HOOK", { intent, allow, deny, refresh });
+    setIntent({ intent, allow, deny, refresh });
+  });
+
+  ca.setOnAllowanceHook(({ allow, deny, sources }) => {
+    debugInfo("ON ALLOWANCE HOOK", { allow, deny, sources });
+    setAllowance({ allow, deny, sources });
   });
 
   useEffect(() => {
     debugInfo("Detected Providers", providers);
     for (const provider of providers) {
       if (provider.provider.selectedAddress) {
-        initializeSdk(provider.provider).then(() => {
-          debugInfo("SDK INITIALIZED 1", isSdkInitialized);
+        ca.setEVMProvider(provider.provider);
+        ca.init().then(() => {
+          window.nexus = ca;
           fetchUnifiedBalances();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: provider.info.name,
+                walletAddress: provider.provider.selectedAddress,
+                providerIcon: provider.info.icon ?? null,
+              },
+              "*"
+            );
+          } catch {}
         });
       }
       provider.provider.on("accountsChanged", (event) => {
         debugInfo("ON ACCOUNT CHANGED", event);
         if (event.length) {
-          initializeSdk(provider.provider).then(() => {
-            debugInfo("SDK INITIALIZED 2", event, isSdkInitialized);
+          ca.setEVMProvider(provider.provider);
+          ca.init().then(() => {
+            window.nexus = ca;
             fetchUnifiedBalances();
+            try {
+              window.postMessage(
+                {
+                  type: "NEXUS_PROVIDER_UPDATE",
+                  providerName: provider.info.name,
+                  walletAddress: provider.provider.selectedAddress,
+                  providerIcon: provider.info.icon ?? null,
+                },
+                "*"
+              );
+            } catch {}
           });
         } else {
-          debugInfo("SDK DEINITALIZED", event);
-          deinitializeSdk();
+          ca.deinit();
           clearCache();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: null,
+                walletAddress: null,
+                providerIcon: null,
+              },
+              "*"
+            );
+          } catch {}
         }
       });
       provider.provider.on("connect", (event) => {
-        debugInfo("ON CONNECT");
-        initializeSdk(provider.provider).then(() => {
-          debugInfo("SDK INITIALIZED 3", event, isSdkInitialized);
+        debugInfo("ON CONNECT", event);
+        ca.setEVMProvider(provider.provider);
+        ca.init().then(() => {
+          window.nexus = ca;
           fetchUnifiedBalances();
+          try {
+            window.postMessage(
+              {
+                type: "NEXUS_PROVIDER_UPDATE",
+                providerName: provider.info.name,
+                walletAddress: provider.provider.selectedAddress,
+                providerIcon: provider.info.icon ?? null,
+              },
+              "*"
+            );
+          } catch {}
         });
       });
 
@@ -143,7 +207,6 @@ function NexusApp() {
       debugInfo("Adding Request Interceptor", provider);
       provider.provider.request = async function (...args) {
         debugInfo("Intercepted in useEffect", ...args);
-        let isNexusRequest = false;
         const { method, params } = args[0] as {
           method: string;
           params?: any[];
@@ -163,7 +226,7 @@ function NexusApp() {
             params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
         ) {
           const unifiedBalances = await fetchUnifiedBalances();
-          const tokenAddress = params[0].to.toLowerCase();
+          const tokenAddress = params[0].to.toLowerCase() as string;
           const tokenIndex = unifiedBalances.findIndex((bal) =>
             bal.breakdown.find(
               (token) => token.contractAddress.toLowerCase() === tokenAddress
@@ -190,12 +253,6 @@ function NexusApp() {
             .div(Decimal.pow(10, actualToken?.decimals || 0))
             .toFixed();
 
-          const contractAddress = params[0].data
-            .toLowerCase()
-            .startsWith("0xa9059cbb")
-            ? (decodedData.args![0] as string).toLowerCase()
-            : (decodedData.args![1] as string).toLowerCase();
-
           debugInfo("amount decoded:", amount);
           debugInfo("actual contract:", decodedData.args![0]);
           debugInfo("actual transaction:", args[0]);
@@ -205,21 +262,26 @@ function NexusApp() {
               .mul(Decimal.pow(10, actualToken?.decimals || 0))
               .lessThan(paramAmount)
           ) {
-            isNexusRequest = true;
-            setState({
-              contractAbi: erc20Abi,
-              contractAddress: tokenAddress,
-              tokenAddress,
-              functionName: decodedData.functionName,
-              chainId: SUPPORTED_CHAINS.ARBITRUM,
-              amount,
-              buildFunctionParams() {
-                debugInfo("actual params", decodedData.args);
-                return {
-                  functionParams: decodedData.args!,
-                };
-              },
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token:
+                TOKEN_MAPPING[42161][
+                  tokenAddress.toLowerCase()
+                ].symbol.toLowerCase(),
+              chainID: 42161,
             });
+            const res = await handler.exec();
+            debugInfo("BRIDGE Response", res);
+            return originalRequest.apply(this, args);
           }
         }
 
@@ -229,7 +291,6 @@ function NexusApp() {
           params[0].data.toLowerCase().startsWith("0x4666fc80")
         ) {
           const unifiedBalances = await fetchUnifiedBalances();
-          const lifiContractAddress = params[0].to.toLowerCase();
           const decodedData = decodeFunctionData({
             abi: LifiAbi,
             data: params[0].data,
@@ -262,22 +323,26 @@ function NexusApp() {
               .mul(Decimal.pow(10, actualToken?.decimals || 0))
               .lessThan(paramAmount)
           ) {
-            isNexusRequest = true;
-            setState({
-              // @ts-expect-error
-              contractAbi: LifiAbi,
-              contractAddress: lifiContractAddress,
-              tokenAddress,
-              functionName: decodedData.functionName,
-              chainId: SUPPORTED_CHAINS.ARBITRUM,
-              amount,
-              buildFunctionParams() {
-                debugInfo("actual params", decodedData.args);
-                return {
-                  functionParams: decodedData.args,
-                };
-              },
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token:
+                TOKEN_MAPPING[42161][
+                  tokenAddress.toLowerCase()
+                ].symbol.toLowerCase(),
+              chainID: 42161,
             });
+            const res = await handler.exec();
+            debugInfo("BRIDGE Response", res);
+            return originalRequest.apply(this, args);
           }
         }
 
@@ -365,71 +430,28 @@ function NexusApp() {
           }
           return responseData;
         }
-
-        debugInfo("isNexusRequest", isNexusRequest);
-        if (!isNexusRequest) {
-          return originalRequest.apply(this, args);
-        }
+        return originalRequest.apply(this, args);
       };
     }
   }, []);
 
-  useEffect(() => {
-    // @ts-ignore
-    window.nexus = sdk;
-  }, [sdk]);
-
-  useEffect(() => {
-    debugInfo("SDK INIT RETURN", Date.now());
-    debugInfo("isSdkInitialized", isSdkInitialized);
-  }, [isSdkInitialized]);
-
-  useEffect(() => {
-    debugInfo("STATE CHANGED");
-    buttonRef.current?.click();
-    fixAppModal();
-  }, [state]);
-
-  return state.tokenAddress === ethAddress ? (
-    <div />
-  ) : (
-    <BridgeAndExecuteButton
-      contractAddress={state.contractAddress as `0x${string}`}
-      contractAbi={state.contractAbi}
-      functionName={state.functionName}
-      prefill={{
-        toChainId: state.chainId,
-        token:
-          TOKEN_MAPPING[SUPPORTED_CHAINS.ARBITRUM][state.tokenAddress].symbol,
-        amount: state.amount,
-      }}
-      buildFunctionParams={state.buildFunctionParams}
-    >
-      {({ onClick, isLoading, disabled }) => (
-        <button
-          id="nexus-button"
-          onClick={onClick}
-          disabled={disabled || isLoading}
-          ref={buttonRef}
-          style={{ opacity: 0 }}
-        >
-          {isLoading ? "Processing…" : "Bridge & Supply to Hyperliquid"}
-        </button>
+  return (
+    <>
+      {intent && (
+        <IntentModal intentModal={intent} setIntentModal={setIntent} />
       )}
-    </BridgeAndExecuteButton>
+      {allowance && (
+        <AllowanceModal allowance={allowance} setAllowance={setAllowance} />
+      )}
+    </>
   );
 }
 
 function NexusProviderApp() {
   return (
-    <NexusProvider
-      config={{
-        debug: true,
-        network: "mainnet",
-      }}
-    >
+    <div>
       <NexusApp />
-    </NexusProvider>
+    </div>
   );
 }
 
