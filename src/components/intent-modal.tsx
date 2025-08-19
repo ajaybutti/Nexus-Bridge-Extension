@@ -27,7 +27,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  width: "28rem",
+  width: "540px",
   maxWidth: "65vw",
   color: "#e5e7eb",
   paddingTop: "16px",
@@ -37,6 +37,7 @@ const modalStyle: React.CSSProperties = {
   borderRadius: 16,
   maxHeight: "100%",
   overflow: "auto",
+  margin: "auto",
   boxSizing: "border-box",
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
