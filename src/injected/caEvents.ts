@@ -10,12 +10,10 @@ export function setCAEvents(ca: CA) {
   };
 
   ca.caEvents.on("expected_steps", (data) => {
-    debugInfo("EVENT RECEIVED", "expected_steps", data);
     state.steps = data.map((s: { typeID: number }) => ({ ...s, done: false }));
   });
 
   ca.caEvents.on("step_complete", (data) => {
-    debugInfo("EVENT RECEIVED", "step_complete", data);
     const v = state.steps.find((s) => {
       return s.typeID === data.typeID;
     });
