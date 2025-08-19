@@ -247,6 +247,17 @@ function NexusApp() {
               .mul(Decimal.pow(10, actualToken?.decimals || 0))
               .lessThan(paramAmount)
           ) {
+            const modal = document.querySelector(".modal")!;
+            const mainDiv =
+              modal.children[1].children[0].children[0].children[1].children[0];
+            mainDiv.children[0].innerHTML = "Building Intent";
+            mainDiv.children[1].innerHTML = "";
+            const mainDiv2 =
+              modal.children[1].children[0].children[0].children[1].children[1];
+            mainDiv2.setAttribute(
+              "style",
+              mainDiv2.getAttribute("style") + "visibility: hidden;"
+            );
             const requiredAmount = new Decimal(paramAmount)
               .minus(
                 Decimal.mul(
