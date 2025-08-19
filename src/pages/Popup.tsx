@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./Popup.css";
 import Browser from "webextension-polyfill";
+import Avail from "../components/avail";
 
 export default function () {
   const [switchState, setSwitchState] = useState(false);
@@ -80,23 +81,7 @@ export default function () {
 
   return (
     <div className="popup-container">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          marginBottom: "1rem",
-        }}
-      >
-        <img
-          src="/icon-with-shadow.svg"
-          alt="logo"
-          style={{ width: 24, height: 24 }}
-        />
-        <h1 style={{ fontSize: "1.2rem", fontWeight: 600 }}>
-          Powered by Avail
-        </h1>
-      </div>
+      <Avail disableTopBorder={true} />
       <input
         id="checkbox"
         type="checkbox"

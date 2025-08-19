@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import type { Intent } from "@arcana/ca-sdk";
+import Avail from "./avail";
 
 export type IntentModalProps = {
   intentModal: {
@@ -17,8 +18,9 @@ const overlayStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   backdropFilter: "blur(2px)",
   display: "flex",
+  flexDirection: "column",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent: "space-between",
   zIndex: 2147483646,
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
@@ -28,7 +30,7 @@ const modalStyle: React.CSSProperties = {
   width: "28rem",
   maxWidth: "65vw",
   color: "#e5e7eb",
-  padding: 16,
+  paddingTop: "16px",
   position: "relative",
   background: "rgb(15, 26, 31)",
   border: "1px solid rgb(39, 48, 53)",
@@ -42,8 +44,7 @@ const modalStyle: React.CSSProperties = {
 
 const sectionStyle: React.CSSProperties = {
   background: "rgb(15, 26, 31)",
-  border: "1px solid rgb(39, 48, 53)",
-  borderRadius: 16,
+  borderBottom: "1px solid rgb(39, 48, 53)",
   padding: 12,
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
@@ -101,6 +102,9 @@ export default function IntentModal({
   intentModal,
   setIntentModal,
 }: IntentModalProps) {
+  const [showSources, setShowSources] = useState(false);
+  const [showFeesBreakdown, setShowFeesBreakdown] = useState(false);
+
   const onClose = useCallback(() => {
     if (!intentModal) return;
     intentModal.deny();
@@ -118,216 +122,252 @@ export default function IntentModal({
     const { intent } = intentModal;
     return (
       <div style={modalStyle} role="dialog" aria-modal="true">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            width: "100%",
-            gap: 8,
-          }}
-        >
-          <img
-            className="blob"
-            src="/images/blob.gif"
-            alt="Loading..."
-            style={{ width: 70, filter: "grayscale(100%) brightness(1)" }}
-          />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontWeight: 600, fontSize: 16 }}>
-                Confirm Transaction
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>
-              Please review the details of this transaction carefully.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ height: 12 }} />
-
-        {/* Route */}
-        <div style={sectionStyle}>
+        <div style={{ padding: "0px 16px" }}>
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              alignItems: "center",
+              width: "100%",
+              gap: 8,
             }}
           >
+            <img
+              className="blob"
+              src="/images/blob.gif"
+              alt="Loading..."
+              style={{ width: 70, filter: "grayscale(100%) brightness(1)" }}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>
+                  Confirm Transaction
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                Please review the details of this transaction carefully.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: 12 }} />
+
+          {/* Route */}
+          <div style={sectionStyle}>
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
-                gap: 10,
-                justifyContent: "space-between",
+                flexDirection: "column",
+                gap: 12,
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
+                  alignItems: "center",
+                  gap: 10,
+                  justifyContent: "space-between",
                 }}
               >
-                {intent.sources?.map((s, i) => (
-                  <div key={`${s.chainID}-${i}`} style={chipStyle}>
-                    {s.chainLogo ? (
+                {/* Token logo */}
+                {intent.token?.logo ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "relative",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "flex-start",
+                        flexDirection: "column",
+                      }}
+                    >
                       <img
-                        src={s.chainLogo}
-                        width={18}
-                        height={18}
+                        src={intent.token.logo}
+                        width={24}
+                        height={24}
                         style={{ borderRadius: 9999 }}
                         onError={(e) =>
                           (e.currentTarget.style.display = "none")
                         }
                       />
-                    ) : null}
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>
-                      {s.amount} {intent.token?.symbol}
-                    </span>
+                      <div
+                        style={{
+                          marginTop: "-10px",
+                          marginLeft: "16px",
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        {intent.sources?.map((s, i) => (
+                          <img
+                            src={s.chainLogo}
+                            width={20}
+                            height={20}
+                            key={`${s.chainID}-${i}`}
+                            style={{
+                              borderRadius: 9999,
+                              marginLeft: `-5px`,
+                              zIndex: intent.sources.length - i,
+                            }}
+                            onError={(e) =>
+                              (e.currentTarget.style.display = "none")
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Token logo */}
-              {intent.token?.logo ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    justifyContent: "center",
-                  }}
+                ) : null}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="lucide lucide-arrow-right-icon lucide-arrow-right"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="lucide lucide-arrow-right-from-line-icon lucide-arrow-right-from-line"
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+                {/* Destination */}
+                {intent.destination ? (
+                  <div
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "flex-start",
+                      flexDirection: "column",
+                    }}
                   >
-                    <path d="M3 5v14" />
-                    <path d="M21 12H7" />
-                    <path d="m15 18 6-6-6-6" />
-                  </svg>
-                  <img
-                    src={intent.token.logo}
-                    width={24}
-                    height={24}
-                    style={{ borderRadius: 9999 }}
-                    onError={(e) => (e.currentTarget.style.display = "none")}
-                  />
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="lucide lucide-arrow-right-icon lucide-arrow-right"
-                  >
-                    <path d="M5 12h14" />
-                    <path d="m12 5 7 7-7 7" />
-                  </svg>
-                </div>
-              ) : null}
-
-              {/* Destination */}
-              {intent.destination ? (
-                <div style={chipStyle}>
-                  {intent.destination.chainLogo ? (
                     <img
-                      src={intent.destination.chainLogo}
-                      width={18}
-                      height={18}
+                      src={intent.token.logo}
+                      width={24}
+                      height={24}
                       style={{ borderRadius: 9999 }}
                       onError={(e) => (e.currentTarget.style.display = "none")}
                     />
-                  ) : null}
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>
-                    {intent.destination.amount} {intent.token?.symbol}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Totals for multi-source */}
-            {intent.sources?.length && intent.sources.length > 1 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "#9ca3af",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  fontFamily:
-                    "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
-                }}
-              >
-                Total: {intent.sourcesTotal} {intent.token?.symbol}
+                    <div
+                      style={{
+                        marginTop: "-10px",
+                        marginLeft: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <img
+                        src={intent.destination.chainLogo}
+                        width={18}
+                        height={18}
+                        onError={(e) =>
+                          (e.currentTarget.style.display = "none")
+                        }
+                        style={{
+                          borderRadius: 9999,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Fees */}
-        {intent.fees ? <div style={{ height: 12 }} /> : null}
-        {intent.fees ? (
-          <div style={sectionStyle}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <Row
-                label="Network Gas"
-                value={`${intent.fees.caGas || "0"} ${intent.token?.symbol}`}
-              />
-              {Number(intent.fees.solver) > 0 && (
-                <Row
-                  label="Solver Fee"
-                  value={`${intent.fees.solver} ${intent.token?.symbol}`}
-                />
-              )}
-              {Number(intent.fees.protocol) > 0 && (
-                <Row
-                  label="Protocol Fee"
-                  value={`${intent.fees.protocol} ${intent.token?.symbol}`}
-                />
-              )}
-              {Number(intent.fees.gasSupplied) > 0 && (
-                <Row
-                  label="Additional Gas"
-                  value={`${intent.fees.gasSupplied} ${intent.token?.symbol}`}
-                />
-              )}
-              <div style={{ height: 4, borderTop: "1px solid #2a2f3a" }} />
-              <Row
-                strong
-                label="Total Gas Cost"
-                value={`${intent.fees.total || "0"} ${intent.token?.symbol}`}
-              />
             </div>
           </div>
-        ) : null}
 
-        {/* Actions */}
-        <div style={{ height: 16 }} />
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onClose} style={btnStyleMuted}>
-            Deny
-          </button>
-          <button onClick={handleAllow} style={{ ...btnStylePrimary }}>
-            Allow
-          </button>
+          {/* Fees */}
+          {intent.sources?.length && intent.sources.length > 1 ? (
+            <div style={{ height: 12 }} />
+          ) : null}
+
+          <div style={sectionStyle}>
+            <ExpandableRow
+              strong
+              label="Destination Amount"
+              value={`${intent.sourcesTotal} ${intent.token?.symbol}`}
+              expandLabel="View Sources"
+              isExpanded={showSources}
+              onToggle={() => setShowSources(!showSources)}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {intent.sources?.map((source, index) => (
+                  <Row
+                    key={`${source.chainID}-${index}`}
+                    label={source.chainName}
+                    value={`${source.amount} ${intent.token?.symbol}`}
+                  />
+                ))}
+              </div>
+            </ExpandableRow>
+          </div>
+
+          {intent.fees ? <div style={{ height: 12 }} /> : null}
+
+          {intent.fees ? (
+            <div style={sectionStyle}>
+              <ExpandableRow
+                strong
+                label="Total Fees"
+                value={`${intent.fees.total || "0"} ${intent.token?.symbol}`}
+                expandLabel="View Breakup"
+                isExpanded={showFeesBreakdown}
+                onToggle={() => setShowFeesBreakdown(!showFeesBreakdown)}
+              >
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  <Row
+                    label="Network Gas"
+                    value={`${intent.fees.caGas || "0"} ${
+                      intent.token?.symbol
+                    }`}
+                  />
+                  {Number(intent.fees.solver) > 0 && (
+                    <Row
+                      label="Solver Fee"
+                      value={`${intent.fees.solver} ${intent.token?.symbol}`}
+                    />
+                  )}
+                  {Number(intent.fees.protocol) > 0 && (
+                    <Row
+                      label="Protocol Fee"
+                      value={`${intent.fees.protocol} ${intent.token?.symbol}`}
+                    />
+                  )}
+                  {Number(intent.fees.gasSupplied) > 0 && (
+                    <Row
+                      label="Additional Gas"
+                      value={`${intent.fees.gasSupplied} ${intent.token?.symbol}`}
+                    />
+                  )}
+                </div>
+              </ExpandableRow>
+            </div>
+          ) : null}
+
+          {/* Actions */}
+          <div style={{ height: 16 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} style={btnStyleMuted}>
+              Deny
+            </button>
+            <button onClick={handleAllow} style={{ ...btnStylePrimary }}>
+              Allow
+            </button>
+          </div>
         </div>
+        <Avail />
       </div>
     );
-  }, [intentModal, handleAllow, onClose]);
+  }, [intentModal, handleAllow, onClose, showSources, showFeesBreakdown]);
 
   if (!intentModal) return null;
   return (
@@ -366,6 +406,102 @@ function Row({
       <span style={{ fontSize: 12, fontWeight: strong ? 700 : 600 }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function ExpandableRow({
+  label,
+  value,
+  expandLabel,
+  isExpanded,
+  onToggle,
+  children,
+  strong,
+}: {
+  label: string;
+  value: string;
+  expandLabel: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  children?: React.ReactNode;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            color: strong ? "#e5e7eb" : "#9ca3af",
+            fontWeight: strong ? 600 : 500,
+          }}
+        >
+          {label}
+        </span>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: strong ? 700 : 600 }}>
+            {value}
+          </span>
+          <button
+            onClick={onToggle}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#3b82f6",
+              fontSize: 12,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: 0,
+              gap: 4,
+              fontFamily:
+                "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
+            }}
+          >
+            {expandLabel}
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s ease-in-out",
+              }}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div
+        style={{
+          overflow: "hidden",
+          maxHeight: isExpanded ? "200px" : "0px",
+          opacity: isExpanded ? 1 : 0,
+          transition: "max-height 0.3s ease-in-out, opacity 0.25s ease-in-out",
+        }}
+      >
+        <div style={{ marginTop: 12 }}>{children}</div>
+      </div>
     </div>
   );
 }
