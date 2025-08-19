@@ -50,7 +50,7 @@ function injectDomModifier() {
           )!;
           node.innerHTML = node.innerHTML.replace(
             " from Arbitrum",
-            " from <span style='text-decoration: line-through'>Arbitrum</span> Everywhere"
+            " from <span style='text-decoration: line-through; text-decoration-thickness: 4px;'>Arbitrum</span> Everywhere"
           );
         }
 
