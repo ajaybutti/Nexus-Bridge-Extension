@@ -7,8 +7,9 @@ function generateManifest() {
   const manifest = readJsonFile("src/manifest.json");
   const pkg = readJsonFile("package.json");
   return {
-    name: "Nexus",
-    description: "Build once, scale everywhere",
+    name: "Avail Nexus SDK Injector",
+    description:
+      "A simple extension that injects the Avail Nexus SDK into various dapps",
     version: pkg.version,
     ...manifest,
   };
