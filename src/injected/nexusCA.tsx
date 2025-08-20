@@ -97,35 +97,6 @@ function fixAppModal() {
     ?.setAttribute("style", "z-index: 40");
 }
 
-function initCA(
-  ca: CA,
-  provider: {
-    info: {
-      name: string;
-      icon?: string;
-    };
-    provider: EVMProvider;
-  }
-) {
-  ca.setEVMProvider(provider.provider);
-  ca.init().then(() => {
-    window.nexus = ca;
-    fetchUnifiedBalances();
-    setCAEvents(ca);
-    try {
-      window.postMessage(
-        {
-          type: "NEXUS_PROVIDER_UPDATE",
-          providerName: provider.info.name,
-          walletAddress: provider.provider.selectedAddress,
-          providerIcon: provider.info.icon ?? null,
-        },
-        "*"
-      );
-    } catch {}
-  });
-}
-
 function NexusApp() {
   const ca = new CA({
     network: Network.CORAL,
@@ -220,6 +191,7 @@ function NexusApp() {
             ca.setEVMProvider(provider.provider);
             await ca.init();
             window.nexus = ca;
+            setCAEvents(ca);
             fetchUnifiedBalances();
 
             // Send update for the active provider
@@ -271,6 +243,7 @@ function NexusApp() {
           ca.setEVMProvider(provider.provider);
           ca.init().then(() => {
             window.nexus = ca;
+            setCAEvents(ca);
             fetchUnifiedBalances();
             try {
               window.postMessage(
@@ -296,6 +269,7 @@ function NexusApp() {
             activeProvider.info.name === provider.info.name
           ) {
             ca.deinit();
+
             clearCache();
             activeProvider = null;
             try {
@@ -313,49 +287,50 @@ function NexusApp() {
         }
       });
 
-      provider.provider.on("connect", async (event) => {
-        debugInfo("ON CONNECT", event, provider.info.name);
+      // provider.provider.on("connect", async (event) => {
+      //   debugInfo("ON CONNECT", event, provider.info.name);
 
-        let address = provider.provider.selectedAddress;
-        if (!address) {
-          try {
-            const accounts = (await provider.provider.request?.({
-              method: "eth_accounts",
-            })) as string[] | undefined;
-            address = accounts?.[0] || undefined;
-          } catch {}
-        }
+      //   let address = provider.provider.selectedAddress;
+      //   if (!address) {
+      //     try {
+      //       const accounts = (await provider.provider.request?.({
+      //         method: "eth_accounts",
+      //       })) as string[] | undefined;
+      //       address = accounts?.[0] || undefined;
+      //     } catch {}
+      //   }
 
-        if (address) {
-          // Update active provider
-          activeProvider = {
-            info: provider.info,
-            provider: provider.provider,
-            address,
-          };
-          ca.setEVMProvider(provider.provider);
-          ca.init().then(() => {
-            window.nexus = ca;
-            fetchUnifiedBalances();
-            try {
-              window.postMessage(
-                {
-                  type: "NEXUS_PROVIDER_UPDATE",
-                  providerName: provider.info.name,
-                  walletAddress: address,
-                  providerIcon: provider.info.icon ?? null,
-                },
-                "*"
-              );
-              console.log(
-                "Connect event - new active provider:",
-                provider.info.name,
-                address
-              );
-            } catch {}
-          });
-        }
-      });
+      //   if (address) {
+      //     // Update active provider
+      //     activeProvider = {
+      //       info: provider.info,
+      //       provider: provider.provider,
+      //       address,
+      //     };
+      //     ca.setEVMProvider(provider.provider);
+      //     ca.init().then(() => {
+      //       window.nexus = ca;
+      //       setCAEvents(ca);
+      //       fetchUnifiedBalances();
+      //       try {
+      //         window.postMessage(
+      //           {
+      //             type: "NEXUS_PROVIDER_UPDATE",
+      //             providerName: provider.info.name,
+      //             walletAddress: address,
+      //             providerIcon: provider.info.icon ?? null,
+      //           },
+      //           "*"
+      //         );
+      //         console.log(
+      //           "Connect event - new active provider:",
+      //           provider.info.name,
+      //           address
+      //         );
+      //       } catch {}
+      //     });
+      //   }
+      // });
 
       // Set up request interceptor for this provider
       const originalRequest = provider.provider.request;

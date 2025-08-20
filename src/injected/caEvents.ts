@@ -1,5 +1,4 @@
 import { CA } from "@arcana/ca-sdk";
-import { debugInfo } from "../utils/debug";
 
 function createDiv(exampleDiv: HTMLDivElement, id: string, event: string) {
   const div = document.createElement("div");
@@ -102,6 +101,7 @@ export function setCAEvents(ca: CA) {
     const mainDiv =
       modal.children[1].children[0].children[0].children[1].children[1];
     const incrementor = mainDiv.children.length === 6 ? 1 : 0;
+    let explorerURL = "";
     switch (data.type) {
       case "INTENT_ACCEPTED": {
         updateModalTitleDescription("Submitting Intent");
@@ -113,6 +113,7 @@ export function setCAEvents(ca: CA) {
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Intent Verified</div>
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193) !important; text-align: center; display: block;" bis_skin_checked="1"><a href="${data.data.explorerURL}" style="text-decoration: underline; color: currentColor" target="_blank">View Intent</a></div>
         `;
+        explorerURL = data.data.explorerURL;
         break;
       }
       case "INTENT_COLLECTION": {
@@ -135,7 +136,7 @@ export function setCAEvents(ca: CA) {
         updateModalTitleDescription("Depositing to HyperLiquid");
         mainDiv.children[2 + incrementor].innerHTML = `
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Supplied to Destination</div>
-        <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1"></div>
+        <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">Done</div>
         `;
         break;
       }
