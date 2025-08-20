@@ -61,9 +61,6 @@ function render(App: React.FC) {
     host = document.createElement("div");
     host.id = "nexus-root-host";
     const shadow = host.attachShadow({ mode: "open" });
-    // Attach Tailwind build into shadow root if available
-    // Note: Tailwind v4 in JIT auto mode doesn't need a global stylesheet. If you later
-    // prebuild a CSS file for injected UI, append it here into shadow
     const root = document.createElement("div");
     root.id = "nexus-root";
     shadow.appendChild(root);
@@ -128,29 +125,118 @@ function NexusApp() {
   });
 
   useEffect(() => {
-    debugInfo("Detected Providers", providers);
-    for (const provider of providers) {
-      if (provider.provider.selectedAddress) {
-        ca.setEVMProvider(provider.provider);
-        ca.init().then(() => {
-          window.nexus = ca;
-          fetchUnifiedBalances();
-          try {
+    debugInfo(
+      "Detected Providers:",
+      providers.length,
+      providers.map((p) => ({
+        name: p.info.name,
+        hasSelectedAddress: !!p.provider.selectedAddress,
+      }))
+    );
+
+    let activeProvider: {
+      info: { name: string; icon?: string };
+      provider: EVMProvider;
+      address: string;
+    } | null = null;
+
+    const initializeCA = async () => {
+      // Find the first provider with an active connection
+      for (const provider of providers) {
+        debugInfo(`=== Checking provider: ${provider.info.name} ===`);
+
+        try {
+          let address = provider.provider.selectedAddress;
+          debugInfo(
+            `Initial selectedAddress for ${provider.info.name}:`,
+            address
+          );
+
+          // If selectedAddress is not available, try requesting accounts
+          if (!address) {
+            debugInfo(
+              `No selectedAddress, trying eth_accounts for ${provider.info.name}`
+            );
+            try {
+              const accounts = (await provider.provider.request?.({
+                method: "eth_accounts",
+              })) as string[] | undefined;
+              debugInfo(
+                `eth_accounts result for ${provider.info.name}:`,
+                accounts
+              );
+              address = accounts?.[0] || undefined;
+            } catch (ethAccountsError) {
+              debugInfo(
+                `eth_accounts failed for ${provider.info.name}:`,
+                ethAccountsError
+              );
+            }
+          }
+
+          if (address) {
+            debugInfo(
+              `Found active provider: ${provider.info.name} with address:`,
+              address
+            );
+            activeProvider = {
+              info: provider.info,
+              provider: provider.provider,
+              address,
+            };
+
+            // Set up CA with the active provider
+            ca.setEVMProvider(provider.provider);
+            await ca.init();
+            window.nexus = ca;
+            fetchUnifiedBalances();
+
+            // Send update for the active provider
+            const message = {
+              type: "NEXUS_PROVIDER_UPDATE",
+              providerName: provider.info.name,
+              walletAddress: address,
+              providerIcon: provider.info.icon ?? null,
+            };
+            debugInfo("Posting message for active provider:", message);
+            // Add delay to ensure content script is ready
+            setTimeout(() => window.postMessage(message, "*"), 100);
+
+            break; // Stop looking once we find an active provider
+          }
+        } catch (error) {
+          debugInfo(`Error checking provider ${provider.info.name}:`, error);
+        }
+      }
+
+      if (!activeProvider) {
+        console.log("No active provider found");
+        // Send a message indicating no provider is active
+        setTimeout(
+          () =>
             window.postMessage(
               {
                 type: "NEXUS_PROVIDER_UPDATE",
-                providerName: provider.info.name,
-                walletAddress: provider.provider.selectedAddress,
-                providerIcon: provider.info.icon ?? null,
+                providerName: null,
+                walletAddress: null,
+                providerIcon: null,
               },
               "*"
-            );
-          } catch {}
-        });
+            ),
+          100
+        );
       }
+    };
+
+    initializeCA();
+
+    // Set up event listeners for all providers, but only update if it's the active one
+    for (const provider of providers) {
       provider.provider.on("accountsChanged", (event) => {
-        debugInfo("ON ACCOUNT CHANGED", event);
+        debugInfo("ON ACCOUNT CHANGED", event, provider.info.name);
         if (event.length) {
+          const address = event[0] || provider.provider.selectedAddress;
+          // Re-initialize CA with the new active provider
           ca.setEVMProvider(provider.provider);
           ca.init().then(() => {
             window.nexus = ca;
@@ -160,49 +246,87 @@ function NexusApp() {
                 {
                   type: "NEXUS_PROVIDER_UPDATE",
                   providerName: provider.info.name,
-                  walletAddress: provider.provider.selectedAddress,
+                  walletAddress: address,
                   providerIcon: provider.info.icon ?? null,
                 },
                 "*"
               );
+              console.log(
+                "Account changed - updated active provider:",
+                provider.info.name,
+                address
+              );
             } catch {}
           });
         } else {
-          ca.deinit();
-          clearCache();
-          try {
-            window.postMessage(
-              {
-                type: "NEXUS_PROVIDER_UPDATE",
-                providerName: null,
-                walletAddress: null,
-                providerIcon: null,
-              },
-              "*"
-            );
-          } catch {}
+          // Check if this was the active provider that got disconnected
+          if (
+            activeProvider &&
+            activeProvider.info.name === provider.info.name
+          ) {
+            ca.deinit();
+            clearCache();
+            activeProvider = null;
+            try {
+              window.postMessage(
+                {
+                  type: "NEXUS_PROVIDER_UPDATE",
+                  providerName: null,
+                  walletAddress: null,
+                  providerIcon: null,
+                },
+                "*"
+              );
+            } catch {}
+          }
         }
       });
-      provider.provider.on("connect", (event) => {
-        debugInfo("ON CONNECT", event);
-        ca.setEVMProvider(provider.provider);
-        ca.init().then(() => {
-          window.nexus = ca;
-          fetchUnifiedBalances();
+
+      provider.provider.on("connect", async (event) => {
+        debugInfo("ON CONNECT", event, provider.info.name);
+
+        let address = provider.provider.selectedAddress;
+        if (!address) {
           try {
-            window.postMessage(
-              {
-                type: "NEXUS_PROVIDER_UPDATE",
-                providerName: provider.info.name,
-                walletAddress: provider.provider.selectedAddress,
-                providerIcon: provider.info.icon ?? null,
-              },
-              "*"
-            );
+            const accounts = (await provider.provider.request?.({
+              method: "eth_accounts",
+            })) as string[] | undefined;
+            address = accounts?.[0] || undefined;
           } catch {}
-        });
+        }
+
+        if (address) {
+          // Update active provider
+          activeProvider = {
+            info: provider.info,
+            provider: provider.provider,
+            address,
+          };
+          ca.setEVMProvider(provider.provider);
+          ca.init().then(() => {
+            window.nexus = ca;
+            fetchUnifiedBalances();
+            try {
+              window.postMessage(
+                {
+                  type: "NEXUS_PROVIDER_UPDATE",
+                  providerName: provider.info.name,
+                  walletAddress: address,
+                  providerIcon: provider.info.icon ?? null,
+                },
+                "*"
+              );
+              console.log(
+                "Connect event - new active provider:",
+                provider.info.name,
+                address
+              );
+            } catch {}
+          });
+        }
       });
 
+      // Set up request interceptor for this provider
       const originalRequest = provider.provider.request;
       debugInfo("Adding Request Interceptor", provider);
       provider.provider.request = async function (...args) {
@@ -314,9 +438,6 @@ function NexusApp() {
           const actualToken = unifiedBalances[tokenIndex].breakdown.find(
             (token) => token.contractAddress.toLowerCase() === tokenAddress
           );
-          const amount = new Decimal(paramAmount)
-            .div(Decimal.pow(10, actualToken?.decimals || 0))
-            .toFixed();
 
           if (
             new Decimal(actualToken?.balance || "0")

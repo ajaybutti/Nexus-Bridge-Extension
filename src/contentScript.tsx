@@ -22,6 +22,7 @@ window.addEventListener("message", (event: MessageEvent) => {
     Browser.storage.local.set({
       nexusProviderName: data.providerName ?? null,
       nexusProviderIcon: data.providerIcon ?? null,
+      nexusWalletAddress: data.walletAddress ?? null,
     });
   } catch (e) {
     console.debug("Failed to persist provider name", e);
