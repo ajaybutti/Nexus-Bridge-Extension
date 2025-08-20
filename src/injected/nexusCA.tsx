@@ -35,7 +35,9 @@ type EVMProvider = EthereumProvider & {
 const providers = [] as {
   info: {
     name: string;
-    icon?: string;
+    icon: string;
+    rdns: string;
+    uuid: string;
   };
   provider: EVMProvider;
 }[];
@@ -158,8 +160,14 @@ function NexusApp() {
 
   useEffect(() => {
     debugInfo("Detected Providers", providers);
+    const privyConnections = localStorage.getItem("privy:connections");
+    const existingPrivyConnection =
+      privyConnections && JSON.parse(privyConnections)[0];
     for (const provider of providers) {
-      if (provider.provider.selectedAddress) {
+      if (
+        existingPrivyConnection &&
+        provider.info.rdns === existingPrivyConnection.id
+      ) {
         initCA(ca, provider);
       }
       provider.provider.on("accountsChanged", (event) => {
