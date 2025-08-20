@@ -1,4 +1,5 @@
 import { CA } from "@arcana/ca-sdk";
+import { debugInfo } from "../utils/debug";
 
 function createDiv(exampleDiv: HTMLDivElement, id: string, event: string) {
   const div = document.createElement("div");
@@ -18,7 +19,14 @@ function updateModalTitleDescription(title: string, desc?: string) {
   if (desc) mainDiv.children[1].innerHTML = desc;
 }
 
+let isListening = false;
+
 export function setCAEvents(ca: CA) {
+  if (isListening) {
+    return;
+  }
+  isListening = true;
+
   const state = {
     steps: [] as {
       typeID: string;
@@ -26,14 +34,21 @@ export function setCAEvents(ca: CA) {
       done: boolean;
       data?: any;
     }[],
+    currentSource: 0,
     totalSources: 0,
   };
 
   ca.caEvents.on("expected_steps", (data) => {
-    state.steps = data.map((s: { typeID: number }) => ({ ...s, done: false }));
     const modal = document.querySelector(".modal")!;
     const mainDiv =
       modal.children[1].children[0].children[0].children[1].children[1];
+    if (mainDiv.children.length > 3) {
+      return;
+    }
+    state.steps = data.map((s: { typeID: number }) => ({ ...s, done: false }));
+    state.currentSource = 0;
+    state.totalSources = 0;
+
     const exampleDiv =
       mainDiv.children.length === 3
         ? (mainDiv.children[1] as HTMLDivElement)
@@ -103,7 +118,9 @@ export function setCAEvents(ca: CA) {
       case "INTENT_COLLECTION": {
         mainDiv.children[1 + incrementor].innerHTML = `
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Collecting from Sources</div>
-        <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">${data.data.confirmed}/${state.totalSources}</div>
+        <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">${++state.currentSource}/${
+          state.totalSources
+        }</div>
         `;
       }
       case "INTENT_COLLECTION_COMPLETE": {
