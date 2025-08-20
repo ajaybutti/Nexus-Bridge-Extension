@@ -30,7 +30,7 @@ const modal: React.CSSProperties = {
   width: "540px",
   maxWidth: "65vw",
   color: "#e5e7eb",
-  paddingTop: "16px",
+  padding: "24px",
   position: "relative",
   background: "rgb(15, 26, 31)",
   border: "1px solid rgb(39, 48, 53)",
@@ -39,6 +39,11 @@ const modal: React.CSSProperties = {
   overflow: "auto",
   margin: "auto",
   boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
 };
@@ -167,65 +172,78 @@ export default function AllowanceModal({
         role="dialog"
         aria-modal="true"
       >
-        <div style={{ padding: "0px 16px" }}>
-          <div
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            width: "100%",
+            gap: 11,
+          }}
+        >
+          <p
             style={{
               fontWeight: 600,
-              fontSize: 16,
-              marginBottom: 6,
-              fontFamily:
-                "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
+              fontSize: 24,
+              textAlign: "center",
+              margin: "0",
             }}
           >
-            Approve Spend
-          </div>
-          <div
+            Approve Allowance
+          </p>
+          <p
             style={{
-              fontSize: 12,
+              fontSize: 16,
               color: "#9ca3af",
-              fontFamily:
-                "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
+              textAlign: "center",
+              margin: "0",
             }}
           >
             We need approvals to proceed. Minimum approval is requested for each
             source chain.
-          </div>
-          <div style={{ height: 12 }} />
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              maxHeight: "200px",
-              overflowY: "scroll",
-              scrollbarWidth: "none",
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            maxHeight: "200px",
+            overflowY: "scroll",
+            scrollbarWidth: "none",
+            width: "100%",
+          }}
+        >
+          {rows}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            width: "100%",
+          }}
+        >
+          <button
+            style={{ ...btnStyleMuted }}
+            onClick={() => {
+              allowance.deny();
+              setAllowance(null);
             }}
           >
-            {rows}
-          </div>
-          <div style={{ height: 16 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              style={{ ...btnStyleMuted }}
-              onClick={() => {
-                allowance.deny();
-                setAllowance(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              style={{ ...btnStylePrimary }}
-              onClick={() => {
-                allowance.allow(["min"]);
-                setAllowance(null);
-              }}
-            >
-              Allow Min
-            </button>
-          </div>
+            Cancel
+          </button>
+          <button
+            style={{ ...btnStylePrimary }}
+            onClick={() => {
+              allowance.allow(["min"]);
+              setAllowance(null);
+            }}
+          >
+            Allow Min
+          </button>
         </div>
-        <Avail />
       </div>
     </div>
   );
