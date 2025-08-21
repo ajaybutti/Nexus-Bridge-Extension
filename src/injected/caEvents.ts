@@ -35,6 +35,8 @@ export function setCAEvents(ca: CA) {
     }[],
     currentSource: 0,
     totalSources: 0,
+    currentAllowance: 0,
+    totalAllowances: 0,
   };
 
   ca.caEvents.on("expected_steps", (data) => {
@@ -47,6 +49,8 @@ export function setCAEvents(ca: CA) {
     state.steps = data.map((s: { typeID: number }) => ({ ...s, done: false }));
     state.currentSource = 0;
     state.totalSources = 0;
+    state.currentAllowance = 0;
+    state.totalAllowances = 0;
 
     const exampleDiv =
       mainDiv.children.length === 3
@@ -56,13 +60,36 @@ export function setCAEvents(ca: CA) {
       "style",
       mainDiv.getAttribute("style")!.replace("hidden", "visible")
     );
+    const style = document.createElement("style");
+    style.innerHTML = `
+    .loader {
+      animation: l1 0.6s linear infinite alternate;
+    }
+    @keyframes l1 {to{opacity: 0.6, color: rgb(80, 210, 193)}}
+    `;
+    mainDiv.append(style);
     state.steps.forEach((s) => {
       switch (s.type) {
+        case "ALLOWANCE_ALL_DONE": {
+          const div = createDiv(exampleDiv, s.typeID, s.type);
+          div.id = "intent-allowances";
+          div.innerHTML = `
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Setting up Allowances</div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1">0/${state.totalAllowances}</div>
+          `;
+          mainDiv.insertBefore(div, exampleDiv);
+          break;
+        }
+        case "ALLOWANCE_USER_APPROVAL": {
+          ++state.totalAllowances;
+          break;
+        }
         case "INTENT_SUBMITTED": {
           const div = createDiv(exampleDiv, s.typeID, s.type);
+          div.id = "intent-submitted";
           div.innerHTML = `
           <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Verifying Intent</div>
-          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1"></div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1">Not Verified</div>
           `;
           mainDiv.insertBefore(div, exampleDiv);
           break;
@@ -73,6 +100,7 @@ export function setCAEvents(ca: CA) {
         }
         case "INTENT_COLLECTION_COMPLETE": {
           const div = createDiv(exampleDiv, s.typeID, s.type);
+          div.id = "intent-collection";
           div.innerHTML = `
           <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Collecting from Sources</div>
           <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">0/${state.totalSources}</div>
@@ -82,9 +110,10 @@ export function setCAEvents(ca: CA) {
         }
         case "INTENT_FULFILLED": {
           const div = createDiv(exampleDiv, s.typeID, s.type);
+          div.id = "intent-fulfilled";
           div.innerHTML = `
           <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Supplying to Destination</div>
-          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1"></div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1">Not Supplied</div>
           `;
           mainDiv.insertBefore(div, exampleDiv);
           break;
@@ -100,44 +129,102 @@ export function setCAEvents(ca: CA) {
     const modal = document.querySelector(".modal")!;
     const mainDiv =
       modal.children[1].children[0].children[0].children[1].children[1];
-    const incrementor = mainDiv.children.length === 6 ? 1 : 0;
-    let explorerURL = "";
     switch (data.type) {
+      case "ALLOWANCE_ALL_DONE": {
+        updateModalTitleDescription("Allowances setup done");
+        const allowanceDiv = mainDiv.querySelector("#intent-allowances");
+        if (allowanceDiv) {
+          allowanceDiv.innerHTML = `
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Allowances Setup Done</div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193) !important; text-align: center; display: block;" bis_skin_checked="1">${state.totalAllowances}/${state.totalAllowances}</div>
+          `;
+        }
+        break;
+      }
+      case "ALLOWANCE_USER_APPROVAL": {
+        updateModalTitleDescription(
+          `Setting up allowances on ${data.data.chainName}`
+        );
+        const allowanceDiv = mainDiv.querySelector("#intent-allowances");
+        if (allowanceDiv) {
+          allowanceDiv.children[0].classList.add("loader");
+        }
+        break;
+      }
+      case "ALLOWANCE_APPROVAL_MINED": {
+        const allowanceDiv = mainDiv.querySelector("#intent-allowances");
+        if (allowanceDiv) {
+          allowanceDiv.innerHTML = `
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Allowances Setup Done</div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193) !important; text-align: center; display: block;" bis_skin_checked="1">${++state.currentAllowance}/${
+            state.totalAllowances
+          }</div>
+          `;
+        }
+        break;
+      }
       case "INTENT_ACCEPTED": {
         updateModalTitleDescription("Submitting Intent");
+        const allowanceDiv = mainDiv.querySelector("#intent-submitted");
+        if (allowanceDiv) {
+          allowanceDiv.children[0].classList.add("loader");
+        }
         break;
       }
       case "INTENT_SUBMITTED": {
         updateModalTitleDescription("Collecting from Sources");
-        mainDiv.children[0 + incrementor].innerHTML = `
+        const intentDiv = mainDiv.querySelector("#intent-submitted");
+        if (intentDiv) {
+          intentDiv.innerHTML = `
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Intent Verified</div>
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193) !important; text-align: center; display: block;" bis_skin_checked="1"><a href="${data.data.explorerURL}" style="text-decoration: underline; color: currentColor" target="_blank">View Intent</a></div>
         `;
-        explorerURL = data.data.explorerURL;
+        }
+        // explorerURL = data.data.explorerURL;
+        break;
+      }
+      case "INTENT_HASH_SIGNED": {
+        const intentDiv = mainDiv.querySelector("#intent-collection");
+        if (intentDiv) {
+          intentDiv.children[0].classList.add("loader");
+        }
         break;
       }
       case "INTENT_COLLECTION": {
-        mainDiv.children[1 + incrementor].innerHTML = `
-        <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Collecting from Sources</div>
+        const intentDiv = mainDiv.querySelector("#intent-collection");
+        if (intentDiv) {
+          intentDiv.innerHTML = `
+        <div class="sc-bjfHbI jxtURp body12Regular loader" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Collecting from Sources</div>
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">${++state.currentSource}/${
-          state.totalSources
-        }</div>
+            state.totalSources
+          }</div>
         `;
+        }
       }
       case "INTENT_COLLECTION_COMPLETE": {
         updateModalTitleDescription("Supplying Liquidity");
-        mainDiv.children[1 + incrementor].innerHTML = `
+        const intentDiv = mainDiv.querySelector("#intent-collection");
+        if (intentDiv) {
+          intentDiv.innerHTML = `
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Collected from Sources</div>
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">${state.totalSources}/${state.totalSources}</div>
         `;
+        }
+        const collectionDiv = mainDiv.querySelector("#intent-fulfilled");
+        if (collectionDiv) {
+          collectionDiv.children[0].classList.add("loader");
+        }
         break;
       }
       case "INTENT_FULFILLED": {
         updateModalTitleDescription("Depositing to HyperLiquid");
-        mainDiv.children[2 + incrementor].innerHTML = `
+        const intentDiv = mainDiv.querySelector("#intent-fulfilled");
+        if (intentDiv) {
+          intentDiv.innerHTML = `
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Supplied to Destination</div>
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193); text-align: center; display: block; font-weight: bold" bis_skin_checked="1">Done</div>
         `;
+        }
         break;
       }
       default:
