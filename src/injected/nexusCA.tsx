@@ -3,6 +3,7 @@ import {
   CA,
   Intent,
   Network,
+  UserAsset,
   type EthereumProvider,
 } from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
@@ -19,13 +20,14 @@ import {
   MulticallAddress,
 } from "../utils/multicall";
 import { createRoot, Root } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TOKEN_MAPPING } from "../utils/constants";
 import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
-import { setCAEvents, unsetCAEvents } from "./caEvents";
+import { setCAEvents } from "./caEvents";
+import { formatDecimalAmount } from "../utils/lib";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -116,6 +118,10 @@ function NexusApp() {
     sources: AllowanceHookSources;
   } | null>(null);
 
+  const unifiedBalancesRef = useRef<UserAsset[] | null>(null);
+
+  const requiredAmountRef = useRef<string | null>(null);
+
   ca.setOnIntentHook(({ intent, allow, deny, refresh }) => {
     debugInfo("ON INTENT HOOK", { intent, allow, deny, refresh });
     setIntent({ intent, allow, deny, refresh });
@@ -192,7 +198,9 @@ function NexusApp() {
             await ca.init();
             window.nexus = ca;
             setCAEvents(ca);
-            fetchUnifiedBalances();
+            fetchUnifiedBalances().then((balances) => {
+              unifiedBalancesRef.current = balances;
+            });
 
             // Send update for the active provider
             const message = {
@@ -244,7 +252,9 @@ function NexusApp() {
           ca.init().then(() => {
             window.nexus = ca;
             setCAEvents(ca);
-            fetchUnifiedBalances();
+            fetchUnifiedBalances().then((balances) => {
+              unifiedBalancesRef.current = balances;
+            });
             try {
               window.postMessage(
                 {
@@ -356,6 +366,7 @@ function NexusApp() {
             params[0].data.toLowerCase().startsWith("0x23b872dd")) // ERC20 transferFrom
         ) {
           const unifiedBalances = await fetchUnifiedBalances();
+          unifiedBalancesRef.current = unifiedBalances;
           const tokenAddress = params[0].to.toLowerCase() as string;
           const tokenIndex = unifiedBalances.findIndex((bal) =>
             bal.breakdown.find(
@@ -412,6 +423,7 @@ function NexusApp() {
               )
               .div(Decimal.pow(10, actualToken?.decimals || 0))
               .toFixed();
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
               token:
@@ -432,6 +444,7 @@ function NexusApp() {
           params[0].data.toLowerCase().startsWith("0x4666fc80")
         ) {
           const unifiedBalances = await fetchUnifiedBalances();
+          unifiedBalancesRef.current = unifiedBalances;
           const decodedData = decodeFunctionData({
             abi: LifiAbi,
             data: params[0].data,
@@ -470,6 +483,7 @@ function NexusApp() {
               )
               .div(Decimal.pow(10, actualToken?.decimals || 0))
               .toFixed();
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
               token:
@@ -513,6 +527,7 @@ function NexusApp() {
               allowFailure: boolean;
             }[];
             const unifiedBalances = await fetchUnifiedBalances();
+            unifiedBalancesRef.current = unifiedBalances;
             params.forEach((param, pIndex) => {
               try {
                 const decodedParam = decodeFunctionData({
@@ -576,7 +591,12 @@ function NexusApp() {
   return (
     <>
       {intent && (
-        <IntentModal intentModal={intent} setIntentModal={setIntent} />
+        <IntentModal
+          intentModal={intent}
+          setIntentModal={setIntent}
+          requiredAmount={requiredAmountRef.current}
+          unifiedBalances={unifiedBalancesRef.current}
+        />
       )}
       {allowance && (
         <AllowanceModal allowance={allowance} setAllowance={setAllowance} />
