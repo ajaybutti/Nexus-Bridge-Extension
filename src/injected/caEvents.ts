@@ -65,7 +65,7 @@ export function setCAEvents(ca: CA) {
     .loader {
       animation: l1 0.6s linear infinite alternate;
     }
-    @keyframes l1 {to{opacity: 0.6, color: rgb(80, 210, 193)}}
+    @keyframes l1 {to{opacity: 0.6; color: rgb(80, 210, 193)}}
     `;
     mainDiv.append(style);
     state.steps.forEach((s) => {
@@ -180,14 +180,11 @@ export function setCAEvents(ca: CA) {
         <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(80, 210, 193) !important; text-align: center; display: block;" bis_skin_checked="1"><a href="${data.data.explorerURL}" style="text-decoration: underline; color: currentColor" target="_blank">View Intent</a></div>
         `;
         }
-        // explorerURL = data.data.explorerURL;
-        break;
-      }
-      case "INTENT_HASH_SIGNED": {
-        const intentDiv = mainDiv.querySelector("#intent-collection");
-        if (intentDiv) {
-          intentDiv.children[0].classList.add("loader");
+        const collectionDiv = mainDiv.querySelector("#intent-collection");
+        if (collectionDiv) {
+          collectionDiv.children[0].classList.add("loader");
         }
+        // explorerURL = data.data.explorerURL;
         break;
       }
       case "INTENT_COLLECTION": {
