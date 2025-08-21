@@ -8,7 +8,6 @@ import Decimal from "decimal.js";
 import { createResponse } from "../utils/response";
 import { debugInfo } from "../utils/debug";
 import { fetchUnifiedBalances } from "./cache";
-import { CA } from "@arcana/ca-sdk";
 
 function injectNetworkInterceptor() {
   const originalFetch = window.fetch;
@@ -67,15 +66,6 @@ function injectNetworkInterceptor() {
               callData: `0x${string}`;
               allowFailure: boolean;
             }[];
-            if (!window.nexus?.getUnifiedBalances) {
-              let isNexusInit = false;
-              while (!isNexusInit) {
-                await new Promise((resolve) => setTimeout(resolve, 10));
-                isNexusInit = (window.nexus as CA)?.getUnifiedBalances
-                  ? true
-                  : false;
-              }
-            }
             const unifiedBalances = await fetchUnifiedBalances();
             params.forEach((param, pIndex) => {
               try {
