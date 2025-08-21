@@ -1,5 +1,6 @@
 import { UserAsset } from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
+import { hasNexusInit } from "./checkNexus";
 
 const cacheKeys = {
   UNIFIED_BALANCES: "unifiedBalances",
@@ -53,9 +54,10 @@ export async function fetchUnifiedBalances() {
   //   }
   window.nexusCache.set(cacheKeys.ALREADY_RUNNING, true);
   debugInfo("UNIFIED BALANCES FETCHING FROM NETWORK");
+  await hasNexusInit();
   const balances = await window.nexus.getUnifiedBalances();
   window.nexusCache.set(cacheKeys.ALREADY_RUNNING, false);
-  debugInfo("UNIFIED BALANCES FETCHED FROM NETWORK");
+  debugInfo("UNIFIED BALANCES FETCHED FROM NETWORK", balances);
   window.nexusCache.set(cacheKeys.UNIFIED_BALANCES, {
     balances,
     expiry: Date.now() + 60 * 1000, // Cache for 1 minute
