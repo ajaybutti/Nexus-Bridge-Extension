@@ -237,7 +237,13 @@ export default function AllowanceModal({
           <button
             style={{ ...btnStylePrimary }}
             onClick={() => {
-              allowance.allow(["min"]);
+              allowance.allow(
+                (
+                  Array.from({
+                    length: allowance.sources.length,
+                  }) as string[]
+                ).fill("min")
+              );
               setAllowance(null);
             }}
           >
