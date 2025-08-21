@@ -65,7 +65,7 @@ export function setCAEvents(ca: CA) {
     .loader {
       animation: l1 0.6s linear infinite alternate;
     }
-    @keyframes l1 {to{opacity: 0.6, color: rgb(80, 210, 193)}}
+    @keyframes l1 {to{opacity: 0.6; color: rgb(80, 210, 193)}}
     `;
     mainDiv.append(style);
     state.steps.forEach((s) => {
