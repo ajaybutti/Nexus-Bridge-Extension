@@ -3,6 +3,7 @@ import type { Intent, UserAsset } from "@arcana/ca-sdk";
 import Avail from "./avail";
 import ExpandableRow, { Row } from "./expandable-row";
 import { debugInfo } from "../utils/debug";
+import { formatDecimalAmount } from "../utils/lib";
 
 export type IntentModalProps = {
   intentModal: {
@@ -121,7 +122,7 @@ const FeesSection = ({
       <div style={sectionStyle}>
         <ExpandableRow
           strong
-          label="Destination Amount"
+          label="Liquidity Required"
           value={`${intent?.sourcesTotal} ${intent?.token?.symbol}`}
           subValue={`${intent?.sourcesTotal} USD`}
           expandLabel="View Sources"
@@ -270,7 +271,7 @@ const Header = () => {
           margin: "0",
         }}
       >
-        Confirm Transaction
+        Confirm Intent
       </p>
       <p
         style={{
@@ -280,7 +281,8 @@ const Header = () => {
           margin: "0",
         }}
       >
-        Please review the details of this transaction carefully.
+        Lets get you the funds your are missing on Arbitrum to complete the
+        deposit.
       </p>
     </div>
   );
@@ -388,13 +390,7 @@ const HLSection = () => {
   );
 };
 
-const DestinationSection = ({
-  intent,
-  destinationChainBalance,
-}: {
-  intent: Intent;
-  destinationChainBalance?: string | null;
-}) => {
+const DestinationSection = ({ intent }: { intent: Intent }) => {
   return (
     <div
       style={{
@@ -405,26 +401,13 @@ const DestinationSection = ({
         flexDirection: "column",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          flexDirection: "column",
-          justifyContent: "center",
-          gap: 4,
-        }}
-      >
-        <span style={{ fontSize: 12, color: "#fff" }}>
-          {destinationChainBalance ?? ""}
-        </span>
-        <img
-          src={intent?.token?.logo}
-          width={46}
-          height={46}
-          style={{ borderRadius: 9999 }}
-          onError={(e) => (e.currentTarget.style.display = "none")}
-        />
-      </div>
+      <img
+        src={intent?.token?.logo}
+        width={46}
+        height={46}
+        style={{ borderRadius: 9999 }}
+        onError={(e) => (e.currentTarget.style.display = "none")}
+      />
 
       <div
         style={{
@@ -474,24 +457,34 @@ const Routes = ({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 10,
-          justifyContent: "space-around",
+          justifyContent: "center",
+          gap: 4,
+          flexDirection: "column",
+          width: "100%",
           backgroundColor: "#2A3134",
           borderRadius: 8,
-          height: 76,
-          width: "100%",
+          paddingBottom: "6px",
         }}
       >
-        {intent?.token?.logo ? <SourceSection intent={intent} /> : null}
-        <RouteArrow label={intent?.destination?.amount ?? ""} />
-        {intent?.destination ? (
-          <DestinationSection
-            intent={intent}
-            destinationChainBalance={destinationChainBalance}
-          />
-        ) : null}
-        <RouteArrow label={requiredAmount ?? ""} />
-        <HLSection />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            justifyContent: "space-around",
+            height: 76,
+            width: "100%",
+          }}
+        >
+          {intent?.token?.logo ? <SourceSection intent={intent} /> : null}
+          <RouteArrow label={intent?.sourcesTotal ?? ""} />
+          {intent?.destination ? <DestinationSection intent={intent} /> : null}
+          <RouteArrow label={requiredAmount ?? ""} />
+          <HLSection />
+        </div>
+        <span style={{ fontSize: 14, color: "#fff", fontWeight: 600 }}>
+          {destinationChainBalance ?? ""}
+        </span>
       </div>
     </div>
   );
@@ -530,7 +523,7 @@ const Actions = ({
           cursor: isRefreshing ? "not-allowed" : "pointer",
         }}
       >
-        Allow
+        {isRefreshing ? "Refreshing..." : "Allow"}
       </button>
     </div>
   );
@@ -548,12 +541,20 @@ export default function IntentModal({
 
   const destinationChainBalance = useMemo(() => {
     if (!unifiedBalances || !intentModal) return null;
+
     const destinationChainId = intentModal?.intent?.destination?.chainID;
     const destinationToken = intentModal?.intent?.token.symbol;
-    const destinationChainBalance = unifiedBalances
-      .find((balance) => balance?.symbol === destinationToken)
-      ?.breakdown.find((b) => b.chain?.id === destinationChainId);
-    return destinationChainBalance?.balance;
+    if (!destinationChainId || !destinationToken) return null;
+    const tokenBalance = unifiedBalances.find(
+      (balance) => balance?.symbol === destinationToken
+    );
+
+    if (!tokenBalance) return null;
+    const chainBreakdown = tokenBalance.breakdown?.find(
+      (breakdown) => breakdown?.chain?.id === destinationChainId
+    );
+    console.log("==== chainBreakdown", chainBreakdown);
+    return formatDecimalAmount(chainBreakdown?.balance || "0");
   }, [unifiedBalances, intentModal]);
 
   const onClose = useCallback(() => {

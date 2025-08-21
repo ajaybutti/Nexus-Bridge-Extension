@@ -27,6 +27,7 @@ import { LifiAbi } from "../utils/lifi.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
 import { setCAEvents } from "./caEvents";
+import { formatDecimalAmount } from "../utils/lib";
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -197,7 +198,9 @@ function NexusApp() {
             await ca.init();
             window.nexus = ca;
             setCAEvents(ca);
-            unifiedBalancesRef.current = await fetchUnifiedBalances();
+            fetchUnifiedBalances().then((balances) => {
+              unifiedBalancesRef.current = balances;
+            });
 
             // Send update for the active provider
             const message = {
@@ -420,7 +423,7 @@ function NexusApp() {
               )
               .div(Decimal.pow(10, actualToken?.decimals || 0))
               .toFixed();
-            requiredAmountRef.current = requiredAmount;
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
               token:
@@ -480,7 +483,7 @@ function NexusApp() {
               )
               .div(Decimal.pow(10, actualToken?.decimals || 0))
               .toFixed();
-            requiredAmountRef.current = requiredAmount;
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
               token:
@@ -591,8 +594,7 @@ function NexusApp() {
         <IntentModal
           intentModal={intent}
           setIntentModal={setIntent}
-          // requiredAmount={requiredAmountRef.current}
-          requiredAmount={"10"}
+          requiredAmount={requiredAmountRef.current}
           unifiedBalances={unifiedBalancesRef.current}
         />
       )}

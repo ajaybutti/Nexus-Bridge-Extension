@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import type { AllowanceHookSources } from "@arcana/ca-sdk";
 import Decimal from "decimal.js";
 import Avail from "./avail";
@@ -155,6 +155,17 @@ export default function AllowanceModal({
         </div>
       );
     });
+  }, [allowance]);
+
+  useEffect(() => {
+    const loadingModal =
+      document.getElementsByClassName("sc-fLcnxK iOdKba")?.[0];
+    if (allowance) {
+      loadingModal?.setAttribute("style", "display: none;");
+    }
+    return () => {
+      loadingModal?.setAttribute("style", "display: block;");
+    };
   }, [allowance]);
 
   if (!allowance) return null;
