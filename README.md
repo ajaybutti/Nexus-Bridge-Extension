@@ -6,7 +6,6 @@ Injects Nexus Chain Abstraction SDK into web3 pages
 
 https://github.com/user-attachments/assets/db4a9ff3-abf3-49c9-bf18-a476b0fdb8be
 
-
 ## Setup
 
 Install dependencies:
@@ -45,3 +44,7 @@ npm run build-zip
 - Injects the SDK and UI into the dapp using content-script
 - Currently only works on Hyperliquid
 - Uses Vite and React
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](https://www.apache.org/licenses/LICENSE-2.0) file for details.
