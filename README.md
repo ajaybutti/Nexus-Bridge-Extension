@@ -2,6 +2,11 @@
 
 Injects Nexus Chain Abstraction SDK into web3 pages
 
+# Injector in action
+
+https://github.com/user-attachments/assets/db4a9ff3-abf3-49c9-bf18-a476b0fdb8be
+
+
 ## Setup
 
 Install dependencies:
