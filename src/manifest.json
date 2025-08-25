@@ -22,7 +22,7 @@
     {
       "all_frames": false,
       "js": ["src/contentScript.tsx"],
-      "matches": ["<all_urls>"],
+      "matches": ["https://app.hyperliquid.xyz/*"],
       "run_at": "document_start"
     }
   ],
@@ -39,5 +39,5 @@
       "matches": ["https://app.hyperliquid.xyz/*"]
     }
   ],
-  "permissions": ["storage", "activeTab", "tabs"]
+  "permissions": ["storage"]
 }
