@@ -1,4 +1,4 @@
-import { UserAsset } from "@arcana/ca-sdk";
+import { UserAsset } from "@avail-project/nexus";
 import { debugInfo } from "../utils/debug";
 import { hasNexusInit } from "./checkNexus";
 

@@ -22,7 +22,11 @@
     {
       "all_frames": false,
       "js": ["src/contentScript.tsx"],
-      "matches": ["https://app.hyperliquid.xyz/*"],
+      "matches": [
+        "https://app.hyperliquid.xyz/*",
+        "https://app.hypurr.fi/*",
+        "https://kinetiq.xyz/*"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -36,7 +40,11 @@
         "src/injected/networkInterceptor.js",
         "src/injected/domModifier.js"
       ],
-      "matches": ["https://app.hyperliquid.xyz/*"]
+      "matches": [
+        "https://app.hyperliquid.xyz/*",
+        "https://app.hypurr.fi/*",
+        "https://kinetiq.xyz/*"
+      ]
     }
   ],
   "permissions": ["storage"]

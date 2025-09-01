@@ -1,17 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { Intent, UserAsset } from "@arcana/ca-sdk";
 import Avail from "./avail";
 import ExpandableRow, { Row } from "./expandable-row";
 import { debugInfo } from "../utils/debug";
 import { formatDecimalAmount } from "../utils/lib";
+import { OnIntentHookData, UserAsset } from "@avail-project/nexus";
+import HostImage from "./host-image";
+import HostText from "./host-text";
+import Decimal from "decimal.js";
 
 export type IntentModalProps = {
-  intentModal: {
-    allow: () => void;
-    deny: () => void;
-    intent: Intent;
-    refresh: () => Promise<Intent>;
-  } | null;
+  intentModal: OnIntentHookData | null;
   setIntentModal: (modal: IntentModalProps["intentModal"]) => void;
   requiredAmount: string | null;
   unifiedBalances: UserAsset[] | null;
@@ -102,7 +100,7 @@ const FeesSection = ({
   showFeesBreakdown,
   setShowFeesBreakdown,
 }: {
-  intent: Intent;
+  intent: OnIntentHookData["intent"];
   showSources: boolean;
   setShowSources: (show: boolean) => void;
   showFeesBreakdown: boolean;
@@ -273,22 +271,20 @@ const Header = () => {
       >
         Confirm Intent
       </p>
-      <p
+
+      <HostText
         style={{
           fontSize: 16,
           color: "#9ca3af",
           textAlign: "center",
           margin: "0",
         }}
-      >
-        Lets get you the funds your are missing on Arbitrum to complete the
-        deposit.
-      </p>
+      />
     </div>
   );
 };
 
-const SourceSection = ({ intent }: { intent: Intent }) => {
+const SourceSection = ({ intent }: { intent: OnIntentHookData["intent"] }) => {
   return (
     <div
       style={{
@@ -379,18 +375,11 @@ const SourceSection = ({ intent }: { intent: Intent }) => {
   );
 };
 
-const HLSection = () => {
-  return (
-    <img
-      className="blob"
-      src="/images/blob.gif"
-      alt="Loading..."
-      style={{ width: 70, filter: "grayscale(100%) brightness(1)" }}
-    />
-  );
-};
-
-const DestinationSection = ({ intent }: { intent: Intent }) => {
+const DestinationSection = ({
+  intent,
+}: {
+  intent: OnIntentHookData["intent"];
+}) => {
   return (
     <div
       style={{
@@ -447,7 +436,7 @@ const Routes = ({
   requiredAmount,
   destinationChainBalance,
 }: {
-  intent: Intent;
+  intent: OnIntentHookData["intent"];
   requiredAmount: string | null;
   destinationChainBalance?: string | null;
 }) => {
@@ -477,10 +466,19 @@ const Routes = ({
           }}
         >
           {intent?.token?.logo ? <SourceSection intent={intent} /> : null}
-          <RouteArrow label={intent?.sourcesTotal ?? ""} />
+          <RouteArrow label={formatDecimalAmount(intent?.sourcesTotal) ?? ""} />
           {intent?.destination ? <DestinationSection intent={intent} /> : null}
-          <RouteArrow label={requiredAmount ?? ""} />
-          <HLSection />
+          <RouteArrow
+            label={
+              formatDecimalAmount(
+                Decimal.add(
+                  intent?.sourcesTotal || 0,
+                  destinationChainBalance || 0
+                ).toFixed(3)
+              ) ?? ""
+            }
+          />
+          <HostImage />
         </div>
         <span style={{ fontSize: 14, color: "#fff", fontWeight: 600 }}>
           {destinationChainBalance ?? ""}

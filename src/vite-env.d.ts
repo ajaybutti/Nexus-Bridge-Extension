@@ -1,10 +1,15 @@
 /// <reference types="vite/client" />
 
-import { CA } from "@arcana/ca-sdk";
+import { NexusSDK } from "@avail-project/nexus";
 
 declare global {
   interface Window {
-    nexus: CA;
+    nexus: NexusSDK;
     nexusCache: Map<string, any>;
+  }
+
+  interface XMLHttpRequest {
+    _method?: string;
+    _url?: string;
   }
 }
