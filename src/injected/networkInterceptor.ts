@@ -11,6 +11,11 @@ import { createResponse } from "../utils/response";
 import { debugInfo } from "../utils/debug";
 import { fetchUnifiedBalances } from "./cache";
 
+function fakeEstimateGasOrigins(origin: string) {
+  const origins = ["app.hyperlend.finance"];
+  return origins.find((o) => origin.includes(o));
+}
+
 function injectNetworkInterceptor() {
   const originalFetch = window.fetch;
   const originalOpen = XMLHttpRequest.prototype.open;
@@ -131,6 +136,61 @@ function injectNetworkInterceptor() {
         payload = JSON.parse(payloadString);
       } catch (error) {
         return originalFetch.apply(this, args);
+      }
+
+      if (
+        payload.method === "eth_estimateGas" &&
+        payload.params?.[0] &&
+        (payload.params[0].data.toLowerCase().startsWith("0xe28c8be3") ||
+          payload.params[0].data.toLowerCase().startsWith("0xf24f0847"))
+      ) {
+        if (fakeEstimateGasOrigins(window.origin)) {
+          return createResponse({
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: new Decimal(1_000_000).toHexadecimal(),
+          });
+        }
+      }
+
+      if (
+        payload.method === "eth_call" &&
+        payload.params?.[0] &&
+        payload.params?.[0].data.toLowerCase().startsWith("0x70a08231")
+      ) {
+        const unifiedBalances = await fetchUnifiedBalances();
+        const token = String(payload.params?.[0].to).toLowerCase();
+        const decodedParam = decodeFunctionData({
+          abi: MulticallAbi,
+          data: payload.params[0].data,
+        });
+
+        if (decodedParam.functionName === "balanceOf") {
+          const index = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (asset) => asset.contractAddress.toLowerCase() === token
+            )
+          );
+
+          const asset = unifiedBalances[index];
+
+          const data = encodeFunctionResult({
+            abi: MulticallAbi,
+            functionName: "balanceOf",
+            result: BigInt(
+              new Decimal(asset.balance)
+                .mul(Decimal.pow(10, asset.decimals))
+                .floor()
+                .toFixed()
+            ),
+          });
+
+          return createResponse({
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: data,
+          });
+        }
       }
 
       if (payload.method === "eth_getBalance" && payload.params?.[0]) {
