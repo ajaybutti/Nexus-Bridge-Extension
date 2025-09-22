@@ -6,6 +6,7 @@ declare global {
   interface Window {
     nexus: NexusSDK;
     nexusCache: Map<string, any>;
+    _unifiedBalanceObserverInitialized: boolean;
   }
 
   interface XMLHttpRequest {

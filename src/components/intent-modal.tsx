@@ -3,16 +3,34 @@ import Avail from "./avail";
 import ExpandableRow, { Row } from "./expandable-row";
 import { debugInfo } from "../utils/debug";
 import { formatDecimalAmount } from "../utils/lib";
-import { OnIntentHookData, UserAsset } from "@avail-project/nexus";
+import {
+  OnIntentHookData,
+  ProgressStep,
+  UserAsset,
+} from "@avail-project/nexus";
 import HostImage from "./host-image";
 import HostText from "./host-text";
 import Decimal from "decimal.js";
+import { removeMainnet } from "../utils/multicall";
+
+interface TotalSpendProps {
+  totalChain:
+    | {
+        amount: string;
+        chainID: number;
+        chainLogo: string | undefined;
+        chainName: string;
+        contractAddress: `0x${string}`;
+      }[];
+  totalAmount: number;
+}
 
 export type IntentModalProps = {
   intentModal: OnIntentHookData | null;
   setIntentModal: (modal: IntentModalProps["intentModal"]) => void;
   requiredAmount: string | null;
   unifiedBalances: UserAsset[] | null;
+  setIntentStepsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 const overlayStyle: React.CSSProperties = {
@@ -24,7 +42,7 @@ const overlayStyle: React.CSSProperties = {
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
-  zIndex: 2147483646,
+  zIndex: 9999999999999999999999,
   fontFamily:
     "Inter, system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif",
 };
@@ -99,13 +117,17 @@ const FeesSection = ({
   setShowSources,
   showFeesBreakdown,
   setShowFeesBreakdown,
+  totalSpend,
 }: {
   intent: OnIntentHookData["intent"];
   showSources: boolean;
   setShowSources: (show: boolean) => void;
   showFeesBreakdown: boolean;
   setShowFeesBreakdown: (show: boolean) => void;
+  totalSpend?: TotalSpendProps | null;
 }) => {
+  console.log(intent, totalSpend, "intent");
+
   return (
     <div
       style={{
@@ -120,9 +142,9 @@ const FeesSection = ({
       <div style={sectionStyle}>
         <ExpandableRow
           strong
-          label="Liquidity Required"
-          value={`${intent?.sourcesTotal} ${intent?.token?.symbol}`}
-          subValue={`${intent?.sourcesTotal} USD`}
+          label="Total Spend"
+          value={`${totalSpend?.totalAmount} ${intent?.token?.symbol}`}
+          subValue={`${totalSpend?.totalAmount} USD`}
           expandLabel="View Sources"
           isExpanded={showSources}
           onToggle={() => setShowSources(!showSources)}
@@ -137,15 +159,20 @@ const FeesSection = ({
               padding: "12px 16px",
             }}
           >
-            {intent?.sources?.map((source, index) => (
-              <Row
-                key={`${source.chainID}-${index}`}
-                label={`${intent?.token?.symbol} (${source.chainName})`}
-                tokenLogo={intent?.token?.logo}
-                chainLogo={source.chainLogo}
-                value={`${source.amount} ${intent?.token?.symbol}`}
-              />
-            ))}
+            {totalSpend?.totalChain?.map((source, index) => {
+              if (Number(source?.amount) === 0) return;
+              return (
+                <Row
+                  key={`${source.chainID}-${index}`}
+                  label={`${intent?.token?.symbol} (${removeMainnet(
+                    source.chainName
+                  )})`}
+                  tokenLogo={intent?.token?.logo}
+                  chainLogo={source.chainLogo}
+                  value={`${source.amount} ${intent?.token?.symbol}`}
+                />
+              );
+            })}
           </div>
         </ExpandableRow>
       </div>
@@ -253,6 +280,7 @@ const RouteArrow = ({ label }: { label: string }) => {
 const Header = () => {
   return (
     <div
+      id="dialog-title"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -509,7 +537,7 @@ const Actions = ({
           cursor: isRefreshing ? "not-allowed" : "pointer",
         }}
       >
-        Deny
+        Cancel
       </button>
       <button
         onClick={handleAllow}
@@ -521,7 +549,7 @@ const Actions = ({
           cursor: isRefreshing ? "not-allowed" : "pointer",
         }}
       >
-        {isRefreshing ? "Refreshing..." : "Allow"}
+        {isRefreshing ? "Refreshing..." : "Confirm"}
       </button>
     </div>
   );
@@ -532,6 +560,7 @@ export default function IntentModal({
   setIntentModal,
   requiredAmount,
   unifiedBalances,
+  setIntentStepsOpen,
 }: IntentModalProps) {
   const [showSources, setShowSources] = useState(false);
   const [showFeesBreakdown, setShowFeesBreakdown] = useState(false);
@@ -551,7 +580,7 @@ export default function IntentModal({
     const chainBreakdown = tokenBalance.breakdown?.find(
       (breakdown) => breakdown?.chain?.id === destinationChainId
     );
-    console.log("==== chainBreakdown", chainBreakdown);
+
     return formatDecimalAmount(chainBreakdown?.balance || "0");
   }, [unifiedBalances, intentModal]);
 
@@ -559,6 +588,7 @@ export default function IntentModal({
     if (!intentModal || isRefreshing) return;
     intentModal.deny();
     setIntentModal(null);
+    setIntentStepsOpen(false);
   }, [intentModal, setIntentModal, isRefreshing]);
 
   const handleAllow = useCallback(() => {
@@ -590,11 +620,47 @@ export default function IntentModal({
     return () => clearInterval(intervalId);
   }, [intentModal, setIntentModal]);
 
+  const totalSpend = useMemo(() => {
+    if (!unifiedBalances || !intentModal) return null;
+
+    const destinationChainId = intentModal?.intent?.destination?.chainID;
+    const destinationToken = intentModal?.intent?.token.symbol;
+    if (!destinationChainId || !destinationToken) return null;
+    const tokenBalance = unifiedBalances.find(
+      (balance) => balance?.symbol === destinationToken
+    );
+
+    if (!tokenBalance) return null;
+    const chainBreakdown = tokenBalance.breakdown?.find(
+      (breakdown) => breakdown?.chain?.id === destinationChainId
+    );
+
+    if (!chainBreakdown) return null;
+    const currentChainSource = {
+      amount: chainBreakdown?.balance,
+      chainID: chainBreakdown?.chain?.id,
+      chainLogo: chainBreakdown?.chain?.logo,
+      chainName: chainBreakdown?.chain?.name,
+      contractAddress: chainBreakdown?.contractAddress,
+    };
+
+    const totalChain = [...intentModal.intent.sources, currentChainSource];
+    const totalAmount =
+      Number(chainBreakdown?.balance) +
+      Number(intentModal?.intent?.sourcesTotal);
+    return { totalChain, totalAmount };
+  }, [unifiedBalances, intentModal]);
+
   const content = useMemo(() => {
     if (!intentModal) return null;
     const { intent } = intentModal;
     return (
-      <div style={modalStyle} role="dialog" aria-modal="true">
+      <div
+        style={modalStyle}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+      >
         <Header />
 
         <Routes
@@ -609,6 +675,7 @@ export default function IntentModal({
           setShowSources={setShowSources}
           showFeesBreakdown={showFeesBreakdown}
           setShowFeesBreakdown={setShowFeesBreakdown}
+          totalSpend={totalSpend}
         />
 
         <Actions
@@ -629,6 +696,7 @@ export default function IntentModal({
   ]);
 
   if (!intentModal) return null;
+
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}>{content}</div>

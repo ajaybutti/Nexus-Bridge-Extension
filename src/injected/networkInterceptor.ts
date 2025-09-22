@@ -2,19 +2,26 @@ import {
   decodeFunctionData,
   decodeFunctionResult,
   encodeFunctionResult,
-  ethAddress,
   zeroAddress,
 } from "viem";
-import { MulticallAbi, MulticallAddress } from "../utils/multicall";
+import {
+  FelixAddress,
+  MulticallAbi,
+  MulticallAddress,
+} from "../utils/multicall";
 import Decimal from "decimal.js";
 import { createResponse } from "../utils/response";
 import { debugInfo } from "../utils/debug";
 import { fetchUnifiedBalances } from "./cache";
+import { publicClient } from "../utils/publicClient";
+
+function fakeEstimateGasOrigins(origin: string) {
+  const origins = ["app.hyperlend.finance"];
+  return origins.find((o) => origin.includes(o));
+}
 
 function injectNetworkInterceptor() {
   const originalFetch = window.fetch;
-  const originalOpen = XMLHttpRequest.prototype.open;
-  const originalSend = XMLHttpRequest.prototype.send;
 
   // @ts-expect-error
   window.decodeFunctionData = decodeFunctionData;
@@ -22,98 +29,6 @@ function injectNetworkInterceptor() {
   window.MulticallAbi = MulticallAbi;
   // @ts-expect-error
   window.decodeFunctionResult = decodeFunctionResult;
-
-  // XMLHttpRequest.prototype.open = function (
-  //   method: string,
-  //   url: string | URL,
-  //   async: boolean = true,
-  //   username?: string | null,
-  //   password?: string | null
-  // ) {
-  //   const _url = url as string;
-  //   const xhr = this;
-  //   this.addEventListener(
-  //     "readystatechange",
-  //     async function () {
-  //       if (this.readyState === 4) {
-  //         try {
-  //           if (
-  //             _url?.includes("https://api.enso.finance/api/v1/wallet/balances")
-  //           ) {
-  //             let dataArray: any[] = [];
-
-  //             if (Array.isArray(xhr.responseText)) {
-  //               dataArray = xhr.responseText;
-  //             } else if (
-  //               xhr.responseText &&
-  //               typeof xhr.responseText === "object"
-  //             ) {
-  //               dataArray = [xhr.responseText];
-  //             } else if (typeof xhr.responseText === "string") {
-  //               try {
-  //                 dataArray = JSON.parse(xhr.responseText);
-  //               } catch (err) {
-  //                 console.error("Invalid JSON responseData:", err);
-  //               }
-  //             }
-
-  //             const unifiedBalances = await fetchUnifiedBalances();
-
-  //             dataArray.forEach((item: any, idx: number) => {
-  //               const asset = unifiedBalances.find((asset: any) =>
-  //                 asset.breakdown?.some((b: any) => {
-  //                   if (!b.contractAddress) return false;
-
-  //                   const contract = b.contractAddress.toLowerCase();
-
-  //                   return (
-  //                     item.token?.toLowerCase() === contract ||
-  //                     (item.token?.toLowerCase() === ethAddress.toLowerCase() &&
-  //                       contract === zeroAddress.toLowerCase())
-  //                   );
-  //                 })
-  //               );
-
-  //               if (asset) {
-  //                 const amount = new Decimal(asset.balance)
-  //                   .mul(Decimal.pow(10, asset.decimals || 0))
-  //                   .floor()
-  //                   .toFixed();
-
-  //                 dataArray[idx] = { ...item, amount };
-  //               } else {
-  //                 console.log("No match for item:", item.token);
-  //               }
-  //             });
-
-  //             console.log(dataArray, "dataArray");
-
-  //             Object.defineProperty(xhr, "responseText", {
-  //               get: () => JSON.stringify(dataArray),
-  //             });
-
-  //             Object.defineProperty(xhr, "response", {
-  //               get: () => JSON.stringify(dataArray),
-  //             });
-
-  //             Object.defineProperty(xhr, "status", {
-  //               get: () => 200,
-  //             });
-
-  //             Object.defineProperty(xhr, "statusText", {
-  //               get: () => "OK",
-  //             });
-  //           }
-  //         } catch (e) {
-  //           console.warn("Failed to patch XHR response:", e);
-  //         }
-  //       }
-  //     },
-  //     false
-  //   );
-
-  //   return originalOpen.apply(this, [method, url, async, username, password]);
-  // };
 
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args);
@@ -131,6 +46,281 @@ function injectNetworkInterceptor() {
         payload = JSON.parse(payloadString);
       } catch (error) {
         return originalFetch.apply(this, args);
+      }
+
+      if (Array.isArray(payload)) {
+        const responses: any[] = [];
+        const responseDatas = await response.clone().json();
+
+        for (let i = 0; i < payload.length; i++) {
+          const item = payload[i];
+
+          if (
+            item.method === "eth_call" &&
+            item.params?.[0] &&
+            (item.params[0].to?.toLowerCase() === MulticallAddress ||
+              item.params[0].to?.toLowerCase() === FelixAddress)
+          ) {
+            const decoded = decodeFunctionData({
+              abi: MulticallAbi,
+              data: item.params[0].data,
+            });
+
+            const responseData = responseDatas.find(
+              (r: any) => r.id === item.id
+            );
+
+            if (decoded.functionName === "aggregate3" && responseData?.result) {
+              try {
+                const decodedResult = decodeFunctionResult({
+                  abi: MulticallAbi,
+                  functionName: "aggregate3",
+                  data: responseData.result,
+                }) as { success: boolean; returnData: string }[];
+
+                const params = decoded.args![0] as {
+                  target: string;
+                  callData: `0x${string}`;
+                  allowFailure: boolean;
+                }[];
+
+                const unifiedBalances = await fetchUnifiedBalances();
+
+                params.forEach((param, pIndex) => {
+                  try {
+                    const decodedParam = decodeFunctionData({
+                      abi: MulticallAbi,
+                      data: param.callData,
+                    });
+
+                    if (decodedParam.functionName !== "balanceOf") return;
+
+                    const index = unifiedBalances.findIndex((bal) => {
+                      if (bal.symbol === "USDC") {
+                        const has999Chain = bal.breakdown.some(
+                          (asset) => asset.chain.id === 999
+                        );
+                        if (has999Chain) return false;
+                      }
+
+                      return bal.breakdown.some(
+                        (asset) =>
+                          asset.contractAddress.toLowerCase() ===
+                          param.target.toLowerCase()
+                      );
+                    });
+
+                    if (index === -1) return;
+
+                    const asset = unifiedBalances[index];
+
+                    const actualAsset = asset.breakdown.find(
+                      (token) =>
+                        token.contractAddress.toLowerCase() ===
+                        param.target.toLowerCase()
+                    );
+
+                    decodedResult[pIndex].returnData = encodeFunctionResult({
+                      abi: MulticallAbi,
+                      functionName: "balanceOf",
+                      result: BigInt(
+                        new Decimal(asset.balance)
+                          .mul(
+                            Decimal.pow(
+                              10,
+                              actualAsset!?.decimals || asset.decimals
+                            )
+                          )
+                          .floor()
+                          .toFixed()
+                      ),
+                    });
+                  } catch (error) {
+                    return decodedResult[pIndex];
+                  }
+                });
+
+                const modifiedResult = encodeFunctionResult({
+                  abi: MulticallAbi,
+                  functionName: "aggregate3",
+                  result: decodedResult,
+                });
+
+                responses.push({
+                  jsonrpc: "2.0",
+                  id: item.id,
+                  result: modifiedResult,
+                });
+              } catch (error) {
+                responses.push({
+                  jsonrpc: "2.0",
+                  id: item.id,
+                  result: responseData.result,
+                });
+              }
+            } else if (decoded.functionName === "deposit" && decoded.args) {
+              try {
+                const unifiedBalancess = await fetchUnifiedBalances();
+                const paramToken = await publicClient.readContract({
+                  address: item?.params[0]?.to,
+                  abi: MulticallAbi,
+                  functionName: "asset",
+                });
+
+                const index = unifiedBalancess.findIndex((bal) => {
+                  if (bal.symbol === "USDC") {
+                    const has999Chain = bal.breakdown.some(
+                      (asset) => asset.chain.id === 999
+                    );
+                    if (has999Chain) return false;
+                  }
+
+                  return bal.breakdown.some(
+                    (asset) =>
+                      asset.contractAddress.toLowerCase() ===
+                      String(paramToken)?.toLowerCase()
+                  );
+                });
+
+                const asset = unifiedBalancess[index];
+
+                const actualAsset = asset?.breakdown.find(
+                  (token) =>
+                    token.contractAddress?.toLowerCase() ===
+                    String(paramToken)?.toLowerCase()
+                );
+
+                const modifiedResult = encodeFunctionResult({
+                  abi: MulticallAbi,
+                  functionName: "deposit",
+                  result: BigInt(
+                    new Decimal(actualAsset!.balance)
+                      .mul(
+                        Decimal.pow(
+                          10,
+                          actualAsset!.decimals || asset?.decimals
+                        )
+                      )
+                      .floor()
+                      .toFixed()
+                  ),
+                });
+
+                responses.push({
+                  jsonrpc: "2.0",
+                  id: item.id,
+                  result: modifiedResult,
+                });
+              } catch (error) {
+                responses.push({
+                  jsonrpc: "2.0",
+                  id: item.id,
+                  result: responseData?.result,
+                });
+              }
+            } else {
+              responses.push({
+                jsonrpc: "2.0",
+                id: item.id,
+                result: responseData?.result,
+              });
+            }
+          } else if (item.method === "eth_getBalance" && item.params?.[0]) {
+            const unifiedBalances = await fetchUnifiedBalances();
+
+            const chainId = 999;
+            const chainIdInNum = new Decimal(chainId).toNumber();
+            const asset = unifiedBalances.find(
+              (asset) =>
+                asset.symbol !== "USDC" &&
+                asset.breakdown.find(
+                  (b) =>
+                    b.chain.id === chainIdInNum &&
+                    b.contractAddress === zeroAddress
+                )
+            );
+
+            if (asset) {
+              responses.push({
+                jsonrpc: "2.0",
+                id: item.id,
+                result: new Decimal(asset.balance || 0)
+                  .mul(Decimal.pow(10, 18))
+                  .toHexadecimal(),
+              });
+            }
+          }
+        }
+
+        if (responses.length === payload.length) {
+          return createResponse(responses);
+        }
+      }
+
+      if (
+        payload.method === "eth_estimateGas" &&
+        payload.params?.[0] &&
+        (payload.params[0].data.toLowerCase().startsWith("0xe28c8be3") ||
+          payload.params[0].data.toLowerCase().startsWith("0xf24f0847"))
+      ) {
+        if (fakeEstimateGasOrigins(window.origin)) {
+          return createResponse({
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: new Decimal(1_000_000).toHexadecimal(),
+          });
+        }
+      }
+
+      if (
+        payload.method === "eth_call" &&
+        payload.params?.[0] &&
+        payload.params?.[0].data.toLowerCase().startsWith("0x70a08231")
+      ) {
+        const unifiedBalances = await fetchUnifiedBalances();
+        const token = String(payload.params?.[0].to).toLowerCase();
+        const decodedParam = decodeFunctionData({
+          abi: MulticallAbi,
+          data: payload.params[0].data,
+        });
+
+        if (decodedParam.functionName === "balanceOf") {
+          const index = unifiedBalances.findIndex((bal) => {
+            if (bal.symbol === "USDC") {
+              const has999Chain = bal.breakdown.some(
+                (asset) => asset.chain.id === 999
+              );
+              if (has999Chain) return false;
+            }
+
+            return bal.breakdown.some(
+              (asset) => asset.contractAddress.toLowerCase() === token
+            );
+          });
+
+          const asset = unifiedBalances[index];
+
+          const actualAsset = asset.breakdown.find(
+            (acAsset) => acAsset.contractAddress.toLowerCase() === token
+          );
+
+          const data = encodeFunctionResult({
+            abi: MulticallAbi,
+            functionName: "balanceOf",
+            result: BigInt(
+              new Decimal(asset.balance)
+                .mul(Decimal.pow(10, actualAsset!.decimals || asset.decimals))
+                .floor()
+                .toFixed()
+            ),
+          });
+
+          return createResponse({
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: data,
+          });
+        }
       }
 
       if (payload.method === "eth_getBalance" && payload.params?.[0]) {
@@ -171,6 +361,7 @@ function injectNetworkInterceptor() {
         if (decoded.functionName === "balanceOf") {
           debugInfo("BALANCE OF CALLED", decoded);
         }
+
         if (decoded.functionName === "aggregate3") {
           const responseData = await response.clone().json();
 
@@ -240,13 +431,20 @@ function injectNetworkInterceptor() {
                   return;
                 }
 
-                const index = unifiedBalances.findIndex((bal) =>
-                  bal.breakdown.find(
+                const index = unifiedBalances.findIndex((bal) => {
+                  if (bal.symbol === "USDC") {
+                    const has999Chain = bal.breakdown.some(
+                      (asset) => asset.chain.id === 999
+                    );
+                    if (has999Chain) return false;
+                  }
+
+                  return bal.breakdown.some(
                     (asset) =>
                       asset.contractAddress.toLowerCase() ===
                       param.target.toLowerCase()
-                  )
-                );
+                  );
+                });
                 if (index === -1) {
                   return;
                 }

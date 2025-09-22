@@ -1,6 +1,7 @@
 import { erc20Abi } from "viem";
 
 export const MulticallAddress = "0xca11bde05977b3631167028862be2a173976ca11";
+export const FelixAddress = "0xfc5126377f0efc0041c0969ef9ba903ce67d151e";
 
 export const MulticallAbi = [
   {
@@ -482,6 +483,64 @@ export const MulticallAbi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [
+      { internalType: "uint256", name: "assets", type: "uint256" },
+      { internalType: "address", name: "receiver", type: "address" },
+    ],
+    name: "deposit",
+    outputs: [{ internalType: "uint256", name: "shares", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "asset",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "_srcTokenIn", type: "address" },
+      { internalType: "uint256", name: "_srcAmountIn", type: "uint256" },
+      {
+        internalType: "bytes",
+        name: "_srcTokenInPermitEnvelope",
+        type: "bytes",
+      },
+      { internalType: "address", name: "_srcSwapRouter", type: "address" },
+      { internalType: "bytes", name: "_srcSwapCalldata", type: "bytes" },
+      { internalType: "address", name: "_srcTokenOut", type: "address" },
+      {
+        internalType: "uint256",
+        name: "_srcTokenExpectedAmountOut",
+        type: "uint256",
+      },
+      {
+        internalType: "address",
+        name: "_srcTokenRefundRecipient",
+        type: "address",
+      },
+      { internalType: "address", name: "_target", type: "address" },
+      { internalType: "bytes", name: "_targetData", type: "bytes" },
+    ],
+    name: "strictlySwapAndCall",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "currency", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "uint256", name: "broker", type: "uint256" },
+    ],
+    name: "deposit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ];
 
 export const erc20TransferAbi = [
@@ -509,3 +568,21 @@ export const erc20TransferAbi = [
     type: "function",
   },
 ];
+
+export const removeMainnet = (str: string): string => {
+  let varOcg: string = str.trim();
+
+  switch (varOcg.toLowerCase()) {
+    case "kaia mainnet":
+      return "Kaia";
+    case "op mainnet":
+      return "Optimism";
+    case "ethereum mainnet":
+      return "Ethereum";
+    default:
+      if (/mainnet/i.test(varOcg)) {
+        return varOcg.replace(/\s*Mainnet/gi, "").trim();
+      }
+      return varOcg;
+  }
+};
