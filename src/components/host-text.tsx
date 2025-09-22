@@ -5,6 +5,9 @@ const DEFAULT_MAPPING: Record<string, string> = {
   "app.hyperliquid.xyz": `Lets get you the funds your are missing on Arbitrum to complete the
       deposit.`,
   "app.hyperlend.finance": `Lets get you the funds on HyperEVM to initiate the deposit.`,
+  "usefelix.xyz": `Lets get you the funds on HyperEVM to initiate the deposit.`,
+  "liminal.money": `Lets get you the funds to initiate the deposit.`,
+  "asterdex.com": `Lets get you the funds to initiate the deposit.`,
 };
 
 type HostTextProps = {

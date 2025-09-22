@@ -26,7 +26,10 @@
         "https://app.hyperliquid.xyz/*",
         "https://app.hypurr.fi/*",
         "https://app.hyperlend.finance/*",
-        "https://liminal.money/*"
+        "https://liminal.money/*",
+        "https://www.usefelix.xyz/*",
+        "https://www.prjx.com/*",
+        "https://www.asterdex.com/*"
       ],
       "run_at": "document_start"
     }
@@ -45,7 +48,10 @@
         "https://app.hyperliquid.xyz/*",
         "https://app.hypurr.fi/*",
         "https://app.hyperlend.finance/*",
-        "https://liminal.money/*"
+        "https://liminal.money/*",
+        "https://www.usefelix.xyz/*",
+        "https://www.prjx.com/*",
+        "https://www.asterdex.com/*"
       ]
     }
   ],

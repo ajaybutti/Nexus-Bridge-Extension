@@ -1,10 +1,14 @@
 import React from "react";
 import hypurrFiLogo from "../assets/logo/hypurrFi.svg";
+import liminalLogo from "../assets/logo/liminal.svg";
 
 const DEFAULT_MAPPING: Record<string, string> = {
   "app.hypurr.fi": hypurrFiLogo,
   "app.hyperliquid.xyz": "/src/assets/logo/hyperliquid.png",
   "app.hyperlend.finance": "HyperLend",
+  "usefelix.xyz": `Felix`,
+  "liminal.money": liminalLogo,
+  "asterdex.com": "ASTER",
 };
 
 const STYLE_MAPPING: Record<string, React.CSSProperties> = {
@@ -14,6 +18,25 @@ const STYLE_MAPPING: Record<string, React.CSSProperties> = {
     color: "rgb(202,234,229)",
     fontSize: "0.938rem",
     marginLeft: "-35px",
+    marginTop: "12px",
+  },
+  "usefelix.xyz": {
+    color: "#FFF",
+    fontSize: "2rem",
+    marginLeft: "-20px",
+    marginTop: "12px",
+  },
+  "liminal.money": {
+    height: 34,
+    width: 130,
+    marginLeft: -50,
+    marginRight: -35,
+    marginTop: 10,
+  },
+  "asterdex.com": {
+    color: "#FFF",
+    fontSize: "1.5rem",
+    marginLeft: "-22px",
     marginTop: "12px",
   },
 };
@@ -27,7 +50,11 @@ const HostImage: React.FC = () => {
   const finalStyle: React.CSSProperties = { ...customStyle };
 
   const isImage =
-    value.endsWith(".png") || value.endsWith(".jpg") || value.startsWith("/");
+    value.endsWith(".png") ||
+    value.endsWith(".svg") ||
+    value.endsWith(".jpg") ||
+    value.startsWith("data:image/svg+xml") ||
+    value.startsWith("/");
 
   return isImage ? (
     <img src={value} alt="Load" style={finalStyle} />
