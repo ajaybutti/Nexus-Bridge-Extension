@@ -1,15 +1,22 @@
 import React, { useEffect, useMemo } from "react";
-import type { AllowanceHookSources } from "@arcana/ca-sdk";
 import Decimal from "decimal.js";
 import Avail from "./avail";
+import { OnAllowanceHookData, ProgressStep } from "@avail-project/nexus";
+
+interface ExtendedStep extends ProgressStep {
+  done: boolean;
+  data?: any; // if you want to store explorerURL, hash, etc.
+}
+
+type SubmitStepsState = {
+  steps: ExtendedStep[];
+  inProgress: boolean;
+};
 
 export type AllowanceModalProps = {
-  allowance: {
-    allow: (s: Array<"max" | "min" | bigint | string>) => void;
-    deny: () => void;
-    sources: AllowanceHookSources;
-  } | null;
+  allowance: OnAllowanceHookData | null;
   setAllowance: (a: AllowanceModalProps["allowance"]) => void;
+  setIntentStepsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 const overlay: React.CSSProperties = {
@@ -99,6 +106,7 @@ const btnStyleMuted: React.CSSProperties = {
 export default function AllowanceModal({
   allowance,
   setAllowance,
+  setIntentStepsOpen,
 }: AllowanceModalProps) {
   const rows = useMemo(() => {
     if (!allowance) return [] as React.ReactNode[];
@@ -241,6 +249,7 @@ export default function AllowanceModal({
             onClick={() => {
               allowance.deny();
               setAllowance(null);
+              setIntentStepsOpen(false);
             }}
           >
             Cancel

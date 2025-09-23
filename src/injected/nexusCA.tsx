@@ -1,11 +1,3 @@
-import {
-  AllowanceHookSources,
-  CA,
-  Intent,
-  Network,
-  UserAsset,
-  type EthereumProvider,
-} from "@arcana/ca-sdk";
 import { debugInfo } from "../utils/debug";
 // Rely on chrome.runtime global for MV3 to resolve stylesheet URL
 import Decimal from "decimal.js";
@@ -13,6 +5,8 @@ import {
   decodeFunctionData,
   decodeFunctionResult,
   encodeFunctionResult,
+  erc20Abi,
+  parseAbi,
 } from "viem";
 import {
   erc20TransferAbi,
@@ -28,6 +22,26 @@ import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
 import { setCAEvents } from "./caEvents";
 import { formatDecimalAmount } from "../utils/lib";
+import {
+  EthereumProvider,
+  NexusSDK,
+  OnAllowanceHook,
+  OnAllowanceHookData,
+  OnIntentHookData,
+  ProgressStep,
+  SUPPORTED_CHAINS_IDS,
+  SUPPORTED_TOKENS,
+  UserAsset,
+} from "@avail-project/nexus";
+import { publicClient } from "../utils/publicClient";
+import type {} from "@avail-project/nexus";
+import { NexusSteps } from "../components/event-modal";
+import { createPortal } from "react-dom";
+
+interface ExtendedStep extends ProgressStep {
+  done: boolean;
+  data?: any; // if you want to store explorerURL, hash, etc.
+}
 
 type EVMProvider = EthereumProvider & {
   isConnected?: () => Promise<boolean>;
@@ -64,6 +78,8 @@ function render(App: React.FC) {
   if (!host) {
     host = document.createElement("div");
     host.id = "nexus-root-host";
+    host.style.position = "fixed";
+    host.style.zIndex = "9999999999";
     const shadow = host.attachShadow({ mode: "open" });
     const root = document.createElement("div");
     root.id = "nexus-root";
@@ -99,24 +115,35 @@ function fixAppModal() {
     ?.setAttribute("style", "z-index: 40");
 }
 
-function NexusApp() {
-  const ca = new CA({
-    network: Network.CORAL,
-    debug: true,
-    siweStatement: "Sign in to experience Nexus effect",
-  });
-  const [intent, setIntent] = useState<{
-    intent: Intent;
-    allow: () => void;
-    deny: () => void;
-    refresh: () => Promise<Intent>;
-  } | null>(null);
+function ShadowPortal({ children }: { children: React.ReactNode }) {
+  // Make sure reactRootElement is the shadow-root container
+  if (!reactRootElement) return null;
+  return createPortal(children, reactRootElement!);
+}
 
-  const [allowance, setAllowance] = useState<{
-    allow: (s: Array<"max" | "min" | bigint | string>) => void;
-    deny: () => void;
-    sources: AllowanceHookSources;
-  } | null>(null);
+type Step = {
+  typeID: string;
+  type: string;
+  done: boolean;
+  data?: any;
+};
+
+function NexusApp() {
+  const ca = new NexusSDK();
+  const [intent, setIntent] = useState<OnIntentHookData | null>(null);
+
+  const [allowance, setAllowance] = useState<OnAllowanceHookData | null>(null);
+
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [currentSource, setCurrentSource] = useState(0);
+  const [totalSources, setTotalSources] = useState(0);
+  const [currentAllowance, setCurrentAllowance] = useState(0);
+  const [totalAllowances, setTotalAllowances] = useState(0);
+  const [title, setTitle] = useState("Signing Intent");
+  const [intentStepsOpen, setIntentStepsOpen] = useState<boolean>(false);
+  const [txURL, setTxURL] = useState<string>("");
+  const [error, setError] = useState<boolean>(false);
+  const [chainId, setChainId] = useState<number>(1);
 
   const unifiedBalancesRef = useRef<UserAsset[] | null>(null);
 
@@ -127,10 +154,104 @@ function NexusApp() {
     setIntent({ intent, allow, deny, refresh });
   });
 
-  ca.setOnAllowanceHook(({ allow, deny, sources }) => {
-    debugInfo("ON ALLOWANCE HOOK", { allow, deny, sources });
-    setAllowance({ allow, deny, sources });
-  });
+  ca.setOnAllowanceHook(
+    ({ allow, deny, sources }: Parameters<OnAllowanceHook>[0]) => {
+      debugInfo("ON ALLOWANCE HOOK", { allow, deny, sources });
+      setAllowance({ allow, deny, sources });
+    }
+  );
+
+  const handleExpectedSteps = (data: Step[]) => {
+    try {
+      const newSteps = [
+        ...data.map((s) => ({
+          ...s,
+          done: false,
+        })),
+        {
+          type: "SUBMIT_TRANSACTION",
+          typeID: "ST",
+          done: false,
+        },
+      ];
+      setIntentStepsOpen(true);
+      setSteps(newSteps);
+      setCurrentSource(0);
+      setTotalSources(0);
+      setCurrentAllowance(0);
+      setTotalAllowances(0);
+
+      let allowanceCount = 0;
+      let sourcesCount = 0;
+      newSteps.forEach((s) => {
+        if (s.type === "ALLOWANCE_USER_APPROVAL") {
+          allowanceCount++;
+        }
+        if (s.type === "INTENT_COLLECTION" && s.data?.total) {
+          sourcesCount = s.data.total;
+        }
+      });
+
+      setTotalAllowances(allowanceCount);
+      setTotalSources(sourcesCount);
+      setTitle("Signing Intent");
+    } catch (error) {
+      console.log("error", error);
+    }
+  };
+
+  const handleStepComplete = (data: any) => {
+    try {
+      switch (data.type) {
+        case "ALLOWANCE_ALL_DONE":
+          setTitle("Allowances setup done");
+          break;
+
+        case "ALLOWANCE_USER_APPROVAL":
+          setTitle(`Setting up allowances on ${data.data.chainName}`);
+          break;
+
+        case "ALLOWANCE_APPROVAL_MINED":
+          setCurrentAllowance((prev) => prev + 1);
+          break;
+
+        case "INTENT_ACCEPTED":
+          setTitle("Submitting Intent");
+          break;
+
+        case "INTENT_SUBMITTED":
+          setTitle("Collecting from Sources");
+          break;
+
+        case "INTENT_COLLECTION":
+          setCurrentSource((prev) => prev + 1);
+          break;
+
+        case "INTENT_COLLECTION_COMPLETE":
+          setTitle(`Receiving on HyperEVM`);
+          break;
+
+        case "INTENT_FULFILLED":
+          setTitle("Submitting Transaction");
+          break;
+
+        case "SUBMIT_TRANSACTION":
+          setTitle("Submitting Transaction");
+          break;
+
+        default:
+          break;
+      }
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.typeID === data.typeID ? { ...s, done: true, data: data.data } : s
+        )
+      );
+    } catch (error) {
+      console.log("error", error);
+    }
+  };
 
   useEffect(() => {
     debugInfo(
@@ -194,9 +315,22 @@ function NexusApp() {
             };
 
             // Set up CA with the active provider
-            ca.setEVMProvider(provider.provider);
-            await ca.init();
+            await provider.provider.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x1" }],
+            });
+            await ca.initialize(provider.provider);
             window.nexus = ca;
+            if (
+              window.origin === "https://app.hyperlend.finance" ||
+              window.origin === "https://www.usefelix.xyz" ||
+              window.origin === "https://liminal.money"
+            ) {
+              await provider.provider.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: "0x3e7" }],
+              });
+            }
             setCAEvents(ca);
             fetchUnifiedBalances().then((balances) => {
               unifiedBalancesRef.current = balances;
@@ -243,14 +377,29 @@ function NexusApp() {
 
     // Set up event listeners for all providers, but only update if it's the active one
     for (const provider of providers) {
-      provider.provider.on("accountsChanged", (event) => {
-        debugInfo("ON ACCOUNT CHANGED", event, provider.info.name);
+      provider.provider.on("accountsChanged", async (event) => {
+        // debugInfo("ON ACCOUNT CHANGED", event, provider.info.name);
         if (event.length) {
           const address = event[0] || provider.provider.selectedAddress;
           // Re-initialize CA with the new active provider
-          ca.setEVMProvider(provider.provider);
-          ca.init().then(() => {
+          // ca.setEVMProvider(provider.provider);
+
+          await provider.provider.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x1" }],
+          });
+          await ca.initialize(provider.provider).then(async () => {
             window.nexus = ca;
+            if (
+              window.origin === "https://app.hyperlend.finance" ||
+              window.origin === "https://www.usefelix.xyz" ||
+              window.origin === "https://liminal.money"
+            ) {
+              await provider.provider.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: "0x3e7" }],
+              });
+            }
             setCAEvents(ca);
             fetchUnifiedBalances().then((balances) => {
               unifiedBalancesRef.current = balances;
@@ -347,11 +496,251 @@ function NexusApp() {
       debugInfo("Adding Request Interceptor", provider);
       provider.provider.request = async function (...args) {
         debugInfo("Intercepted in useEffect", ...args);
+
         const { method, params } = args[0] as {
           method: string;
           params?: any[];
         };
-        debugInfo("Intercepted request:", method, params, provider.provider);
+
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          params[0].data.toLowerCase().startsWith("0x0efe6a8b")
+        ) {
+          const unifiedBalances = await fetchUnifiedBalances();
+          unifiedBalancesRef.current = unifiedBalances;
+
+          const decodedData = decodeFunctionData({
+            abi: MulticallAbi,
+            data: params[0].data,
+          });
+
+          const newArgs = decodedData?.args as any;
+          const paramAmount = newArgs[1].toString();
+          const tokenAddress = newArgs[0].toLowerCase();
+
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) => token.contractAddress.toLowerCase() === tokenAddress
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) => token.contractAddress.toLowerCase() === tokenAddress
+          );
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(paramAmount)
+          ) {
+            document.body.style.pointerEvents = "auto";
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+            const chainIdHex = await window.nexus.request({
+              method: "eth_chainId",
+            });
+            const chainId = parseInt(String(chainIdHex), 16);
+            setChainId(chainId);
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token: TOKEN_MAPPING[chainId][tokenAddress]
+                .symbol as SUPPORTED_TOKENS,
+              chainId: chainId as SUPPORTED_CHAINS_IDS,
+            });
+            console.log("BRIDGE Response", handler);
+            if (!handler.success) {
+              const errorMessage = {
+                code: 4001,
+                message: "User rejected the request.",
+                details: "User denied intent.",
+                version: "viem@2.33.3",
+              };
+              setError(true);
+              throw errorMessage;
+            }
+            const hashResponse = await originalRequest.apply(this, args);
+            setTxURL(hashResponse as string);
+            return hashResponse;
+          }
+        }
+
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].data.toLowerCase().startsWith("0x4d8160ba") ||
+            params[0].data.toLowerCase().startsWith("0xb9303701"))
+        ) {
+          const unifiedBalances = await fetchUnifiedBalances();
+
+          unifiedBalancesRef.current = unifiedBalances;
+          const abiItem = parseAbi([
+            "function createSaltedOrder((address,uint256,bytes,uint256,uint256,bytes,address,bytes,bytes,bytes,bytes),uint64,bytes,uint32,bytes,bytes)",
+          ]);
+
+          const decodedData = decodeFunctionData({
+            abi: [...MulticallAbi, ...abiItem],
+            data: params[0].data,
+          });
+
+          const newArgs = decodedData?.args as any;
+
+          const paramAmount = Array.isArray(newArgs[0])
+            ? (newArgs[0][1] as bigint).toString()
+            : (newArgs[1] as bigint).toString();
+          const tokenAddress = Array.isArray(newArgs[0])
+            ? (newArgs[0][0] as string).toLowerCase()
+            : (newArgs[0] as string).toLowerCase();
+
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) => token.contractAddress.toLowerCase() === tokenAddress
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) => token.contractAddress.toLowerCase() === tokenAddress
+          );
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(paramAmount)
+          ) {
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+            const chainIdHex = await window.nexus.request({
+              method: "eth_chainId",
+            });
+            const chainId = parseInt(String(chainIdHex), 16);
+            setChainId(chainId);
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token: TOKEN_MAPPING[chainId][tokenAddress]
+                .symbol as SUPPORTED_TOKENS,
+              chainId: chainId as SUPPORTED_CHAINS_IDS,
+            });
+            console.log("BRIDGE Response", handler);
+            if (!handler.success) {
+              const errorMessage = {
+                code: 4001,
+                message: "User rejected the request.",
+                details: "User denied intent.",
+                version: "viem@2.33.3",
+              };
+              setError(true);
+              throw errorMessage;
+            }
+            const hashResponse = await originalRequest.apply(this, args);
+            setTxURL(hashResponse as string);
+            return hashResponse;
+          }
+        }
+
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          params[0].data.toLowerCase().startsWith("0x6e553f65")
+        ) {
+          const unifiedBalances = await fetchUnifiedBalances();
+
+          unifiedBalancesRef.current = unifiedBalances;
+
+          const decodedData = decodeFunctionData({
+            abi: MulticallAbi,
+            data: params[0].data,
+          });
+
+          const paramAmount = (decodedData.args?.[0] as bigint).toString();
+          const tokenAddress = await publicClient.readContract({
+            address: params[0]?.to,
+            abi: MulticallAbi,
+            functionName: "asset",
+          });
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) =>
+                token.contractAddress.toLowerCase() ===
+                (tokenAddress as string).toLowerCase()
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) =>
+              token.contractAddress.toLowerCase() ===
+              (tokenAddress as string).toLowerCase()
+          );
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(paramAmount)
+          ) {
+            document.body.style.pointerEvents = "auto";
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+            const chainIdHex = await window.nexus.request({
+              method: "eth_chainId",
+            });
+            const chainId = parseInt(String(chainIdHex), 16);
+            setChainId(chainId);
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token: TOKEN_MAPPING[chainId][
+                (tokenAddress as string).toLowerCase()
+              ].symbol as SUPPORTED_TOKENS,
+              chainId: chainId as SUPPORTED_CHAINS_IDS,
+            });
+            console.log("BRIDGE Response", handler);
+            if (!handler.success) {
+              const errorMessage = {
+                code: 4001,
+                message: "User rejected the request.",
+                details: "User denied intent.",
+                version: "viem@2.33.3",
+              };
+              setError(true);
+              throw errorMessage;
+            }
+            const hashResponse = await originalRequest.apply(this, args);
+            setTxURL(hashResponse as string);
+            return hashResponse;
+          }
+        }
+
         if (
           method === "eth_call" &&
           params?.[0] &&
@@ -359,6 +748,152 @@ function NexusApp() {
         ) {
           debugInfo("BALANCE OF CALLED INSIDE REQUEST", params);
         }
+
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].data.toLowerCase().startsWith("0xe28c8be3") ||
+            params[0].data.toLowerCase().startsWith("0xf24f0847"))
+        ) {
+          const unifiedBalances = await fetchUnifiedBalances();
+          unifiedBalancesRef.current = unifiedBalances;
+          const abiItem = parseAbi([
+            "function zapIn(address tokenIn, uint256 amountIn, uint256 amountOutMin, uint256 minimumMint, uint256 deadline, address[] tokens, (address tokenIn, address tokenOut, uint8 routerIndex, uint24 fee, uint256 amountIn, bool stable)[][], uint256 expectedAmountOut, uint256 feeBps)",
+            "function zapInGluex(address tokenIn,uint256 amountIn,bytes gluexData,uint256 amountOutMin,uint256 minimumMint,uint256 deadline)",
+          ]);
+          const decodedData = decodeFunctionData({
+            abi: abiItem,
+            data: params[0].data,
+          });
+
+          const paramAmount = decodedData.args[1].toString();
+          const tokenAddress = decodedData.args[0].toLowerCase();
+          const tokenIndex = unifiedBalances.findIndex((bal) =>
+            bal.breakdown.find(
+              (token) => token.contractAddress.toLowerCase() === tokenAddress
+            )
+          );
+          if (tokenIndex === -1) {
+            return originalRequest.apply(this, args);
+          }
+          const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+            (token) => token.contractAddress.toLowerCase() === tokenAddress
+          );
+
+          if (
+            new Decimal(actualToken?.balance || "0")
+              .mul(Decimal.pow(10, actualToken?.decimals || 0))
+              .lessThan(paramAmount)
+          ) {
+            document.body.style.pointerEvents = "auto";
+            const requiredAmount = new Decimal(paramAmount)
+              .minus(
+                Decimal.mul(
+                  actualToken?.balance || "0",
+                  Decimal.pow(10, actualToken?.decimals || 0)
+                )
+              )
+              .div(Decimal.pow(10, actualToken?.decimals || 0))
+              .toFixed();
+            requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+            const chainIdHex = await window.nexus.request({
+              method: "eth_chainId",
+            });
+            const chainId = parseInt(String(chainIdHex), 16);
+            setChainId(chainId);
+            const handler = await ca.bridge({
+              amount: requiredAmount,
+              token: TOKEN_MAPPING[chainId][tokenAddress.toLowerCase()]
+                .symbol as SUPPORTED_TOKENS,
+              chainId: chainId as SUPPORTED_CHAINS_IDS,
+            });
+            console.log("BRIDGE Response", handler);
+            if (!handler.success) {
+              const errorMessage = {
+                code: 4001,
+                message: "User rejected the request.",
+                details: "User denied intent.",
+                version: "viem@2.33.3",
+              };
+              throw errorMessage;
+            }
+
+            return originalRequest.apply(this, args);
+          }
+        }
+
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].data.toLowerCase().startsWith("0x095ea7b3") ||
+            params[0].data.toLowerCase().startsWith("0xa9059cbb"))
+        ) {
+          if (window.origin === "https://app.hypurr.fi") {
+            const unifiedBalances = await fetchUnifiedBalances();
+            unifiedBalancesRef.current = unifiedBalances;
+            const decodedData = decodeFunctionData({
+              abi: erc20Abi,
+              data: params[0].data,
+            });
+
+            if (decodedData && decodedData?.args && params[0]?.to) {
+              const tokenAddress = String(params[0]?.to).toLowerCase();
+              const tokenIndex = unifiedBalances.findIndex((bal) =>
+                bal.breakdown.find(
+                  (token) =>
+                    token.contractAddress.toLowerCase() === tokenAddress
+                )
+              );
+              if (tokenIndex === -1) {
+                return originalRequest.apply(this, args);
+              }
+              const actualToken = unifiedBalances[tokenIndex].breakdown.find(
+                (token) => token.contractAddress.toLowerCase() === tokenAddress
+              );
+              const paramAmount = decodedData?.args?.[1] as bigint;
+
+              if (
+                new Decimal(actualToken?.balance || "0")
+                  .mul(Decimal.pow(10, actualToken?.decimals || 0))
+                  .lessThan(paramAmount)
+              ) {
+                const requiredAmount = new Decimal(paramAmount)
+                  .minus(
+                    Decimal.mul(
+                      actualToken?.balance || "0",
+                      Decimal.pow(10, actualToken?.decimals || 0)
+                    )
+                  )
+                  .div(Decimal.pow(10, actualToken?.decimals || 0))
+                  .toFixed();
+                requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+                const chainIdHex = await window.nexus.request({
+                  method: "eth_chainId",
+                });
+                const chainId = parseInt(String(chainIdHex), 16);
+                setChainId(chainId);
+                const handler = await ca.bridge({
+                  amount: requiredAmount,
+                  token: TOKEN_MAPPING[chainId][tokenAddress.toLowerCase()]
+                    .symbol as SUPPORTED_TOKENS,
+                  chainId: chainId as SUPPORTED_CHAINS_IDS,
+                });
+
+                if (!handler.success) {
+                  const errorMessage = {
+                    code: 4001,
+                    message: "User rejected the request.",
+                    details: "User denied intent.",
+                    version: "viem@2.33.3",
+                  };
+                  throw errorMessage;
+                }
+                return originalRequest.apply(this, args);
+              }
+            }
+          }
+        }
+
         if (
           method === "eth_sendTransaction" &&
           params?.[0] &&
@@ -426,13 +961,12 @@ function NexusApp() {
             requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
-              token:
-                TOKEN_MAPPING[42161][
-                  tokenAddress.toLowerCase()
-                ].symbol.toLowerCase(),
-              chainID: 42161,
+              token: TOKEN_MAPPING[42161][
+                tokenAddress.toLowerCase()
+              ].symbol.toLowerCase() as SUPPORTED_TOKENS,
+              chainId: 42161,
             });
-            const res = await handler.exec();
+            const res = handler;
             debugInfo("BRIDGE Response", res);
             return originalRequest.apply(this, args);
           }
@@ -486,13 +1020,12 @@ function NexusApp() {
             requiredAmountRef.current = formatDecimalAmount(requiredAmount);
             const handler = await ca.bridge({
               amount: requiredAmount,
-              token:
-                TOKEN_MAPPING[42161][
-                  tokenAddress.toLowerCase()
-                ].symbol.toLowerCase(),
-              chainID: 42161,
+              token: TOKEN_MAPPING[42161][
+                tokenAddress.toLowerCase()
+              ].symbol.toLowerCase() as SUPPORTED_TOKENS,
+              chainId: 42161,
             });
-            const res = await handler.exec();
+            const res = handler;
             debugInfo("BRIDGE Response", res);
             return originalRequest.apply(this, args);
           }
@@ -508,6 +1041,7 @@ function NexusApp() {
             data: params[0].data,
           });
           const responseData = await originalRequest.apply(this, args);
+
           if (decoded.functionName === "aggregate3") {
             if (!responseData) {
               debugInfo(
@@ -586,20 +1120,59 @@ function NexusApp() {
         return originalRequest.apply(this, args);
       };
     }
+
+    ca.nexusEvents.on("expected_steps", handleExpectedSteps);
+    ca.nexusEvents.on("step_complete", handleStepComplete);
+    return () => {
+      ca.nexusEvents.off("expected_steps", handleExpectedSteps);
+      ca.nexusEvents.off("step_complete", handleStepComplete);
+    };
   }, []);
+
+  useEffect(() => {
+    if (error) {
+      setIntentStepsOpen(false);
+      setError(false);
+      setTxURL("");
+    }
+  }, [error]);
 
   return (
     <>
       {intent && (
-        <IntentModal
-          intentModal={intent}
-          setIntentModal={setIntent}
-          requiredAmount={requiredAmountRef.current}
-          unifiedBalances={unifiedBalancesRef.current}
-        />
+        <ShadowPortal>
+          <IntentModal
+            intentModal={intent}
+            setIntentModal={setIntent}
+            requiredAmount={requiredAmountRef.current}
+            unifiedBalances={unifiedBalancesRef.current}
+            setIntentStepsOpen={setIntentStepsOpen}
+          />
+        </ShadowPortal>
       )}
       {allowance && (
-        <AllowanceModal allowance={allowance} setAllowance={setAllowance} />
+        <ShadowPortal>
+          <AllowanceModal
+            allowance={allowance}
+            setAllowance={setAllowance}
+            setIntentStepsOpen={setIntentStepsOpen}
+          />
+        </ShadowPortal>
+      )}
+      {intentStepsOpen && !intent && !allowance && (
+        <ShadowPortal>
+          <NexusSteps
+            steps={steps}
+            title={title}
+            currentSource={currentSource}
+            totalSources={totalSources}
+            currentAllowance={currentAllowance}
+            totalAllowances={totalAllowances}
+            setIntentStepsOpen={setIntentStepsOpen}
+            txURL={txURL}
+            chainId={chainId}
+          />
+        </ShadowPortal>
       )}
     </>
   );
@@ -608,5 +1181,12 @@ function NexusApp() {
 function NexusProviderApp() {
   return <NexusApp />;
 }
-
 render(NexusProviderApp);
+
+const observer = new MutationObserver(() => {
+  const host = document.getElementById("nexus-root-host");
+  if (!host) {
+    render(NexusProviderApp);
+  }
+});
+observer.observe(document.body, { childList: true, subtree: true });

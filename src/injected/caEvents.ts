@@ -1,4 +1,4 @@
-import { CA } from "@arcana/ca-sdk";
+import { NexusSDK } from "@avail-project/nexus";
 
 function createDiv(exampleDiv: HTMLDivElement, id: string, event: string) {
   const div = document.createElement("div");
@@ -20,7 +20,7 @@ function updateModalTitleDescription(title: string, desc?: string) {
 
 let isListening = false;
 
-export function setCAEvents(ca: CA) {
+export function setCAEvents(ca: NexusSDK) {
   if (isListening) {
     return;
   }
@@ -39,7 +39,7 @@ export function setCAEvents(ca: CA) {
     totalAllowances: 0,
   };
 
-  ca.caEvents.on("expected_steps", (data) => {
+  ca.nexusEvents.on("expected_steps", (data) => {
     const modal = document.querySelector(".modal")!;
     const mainDiv =
       modal.children[1].children[0].children[0].children[1].children[1];
@@ -125,7 +125,7 @@ export function setCAEvents(ca: CA) {
     updateModalTitleDescription("Signing Intent");
   });
 
-  ca.caEvents.on("step_complete", (data) => {
+  ca.nexusEvents.on("step_complete", (data) => {
     const modal = document.querySelector(".modal")!;
     const mainDiv =
       modal.children[1].children[0].children[0].children[1].children[1];
@@ -236,6 +236,6 @@ export function setCAEvents(ca: CA) {
   });
 }
 
-export function unsetCAEvents(ca: CA) {
-  ca.caEvents.removeAllListeners();
+export function unsetCAEvents(ca: NexusSDK) {
+  ca.nexusEvents.removeAllListeners();
 }

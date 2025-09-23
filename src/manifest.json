@@ -22,7 +22,15 @@
     {
       "all_frames": false,
       "js": ["src/contentScript.tsx"],
-      "matches": ["https://app.hyperliquid.xyz/*"],
+      "matches": [
+        "https://app.hyperliquid.xyz/*",
+        "https://app.hypurr.fi/*",
+        "https://app.hyperlend.finance/*",
+        "https://liminal.money/*",
+        "https://www.usefelix.xyz/*",
+        "https://www.prjx.com/*",
+        "https://www.asterdex.com/*"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -36,7 +44,15 @@
         "src/injected/networkInterceptor.js",
         "src/injected/domModifier.js"
       ],
-      "matches": ["https://app.hyperliquid.xyz/*"]
+      "matches": [
+        "https://app.hyperliquid.xyz/*",
+        "https://app.hypurr.fi/*",
+        "https://app.hyperlend.finance/*",
+        "https://liminal.money/*",
+        "https://www.usefelix.xyz/*",
+        "https://www.prjx.com/*",
+        "https://www.asterdex.com/*"
+      ]
     }
   ],
   "permissions": ["storage"]
