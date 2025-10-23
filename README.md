@@ -1,43 +1,190 @@
-# Nexus Injector
+# Nexus Chain Abstraction Browser Extension
 
-Injects Nexus Chain Abstraction SDK into web3 pages
+A powerful browser extension that brings **unified multi-chain liquidity** to DeFi applications through intelligent transaction interception and automated cross-chain bridging. Built on the [Avail Nexus SDK](https://github.com/availproject/nexus), this extension seamlessly integrates chain abstraction into any Web3 dApp without requiring protocol modifications.
 
-# Injector in action
+## 🌟 What is This Project?
 
-https://github.com/user-attachments/assets/db4a9ff3-abf3-49c9-bf18-a476b0fdb8be
+This browser extension acts as an **intelligent middleware layer** between users and DeFi protocols, automatically detecting insufficient token balances and bridging assets from other chains to fulfill transactions. It transforms the fragmented multi-chain experience into a unified liquidity layer.
 
-## Setup
+### Key Features
 
-Install dependencies:
+- 🔄 **Automatic Cross-Chain Bridging**: Detects when you lack sufficient tokens on one chain and automatically sources them from your balances on other chains
+- 💰 **Unified Balance View**: Aggregates your token balances across all supported chains (Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, BNB Chain, HyperEVM)
+- 🎯 **Protocol-Agnostic Integration**: Works with DeFi protocols like Lido, Aave, Hyperliquid, LiFi, and more without requiring any protocol changes
+- 🔐 **Non-Custodial**: All transactions are signed by your existing wallet - the extension never holds your funds
+- ⚡ **EIP-6963 Multi-Wallet Support**: Automatically detects and works with MetaMask, Rabby, Rainbow, and other Web3 wallets
+- 🎨 **Shadow DOM Isolation**: Clean UI injection that doesn't interfere with dApp styling
+
+## 🏗️ Architecture
+
+### Components
+
+1. **Content Script (`nexusCA.tsx`)**: 
+   - Intercepts Web3 provider requests using EIP-6963
+   - Analyzes transaction data to detect protocol interactions (Lido staking, Aave lending, DEX swaps, etc.)
+   - Triggers unified bridging flows when insufficient balances are detected
+   - Manages the Nexus SDK lifecycle and event handling
+
+2. **Background Service Worker (`background.ts`)**: 
+   - Handles extension lifecycle events
+   - Manages persistent state across browser sessions
+
+3. **Popup UI (`popup.tsx`)**: 
+   - Shows extension status and connected wallet info
+   - Displays provider information and connection state
+
+4. **Injected Components**:
+   - `IntentModal`: User interface for approving cross-chain bridge intents
+   - `AllowanceModal`: Token allowance approval flow
+   - `NexusSteps`: Progress tracking for multi-step bridging operations
+
+### Supported Protocols
+
+The extension has specialized integrations for:
+
+- **Lido** - ETH staking with unified ETH across chains
+- **Aave V3** - USDC lending on Base, Ethereum, Optimism, Arbitrum, Polygon, Avalanche, BNB Chain, Scroll
+- **Hyperliquid** - Trading with automatic USDC bridging
+- **LiFi** - Cross-chain swaps with balance aggregation
+- **HypurrFi** - Vault deposits on HyperEVM
+- **Generic ERC20 Transfers** - Supports any token transfer with auto-bridging
+
+## 🚀 How It Works
+
+### Example Flow: Lido Staking
+
+1. User visits Lido and tries to stake 5 ETH
+2. User only has 2 ETH on Ethereum, but has 3 ETH on Arbitrum
+3. Extension intercepts the transaction and detects the deficit
+4. Shows unified balance modal: "You need 3.002 more ETH (including gas)"
+5. User approves the intent to bridge from Arbitrum → Ethereum
+6. Nexus SDK handles the cross-chain transfer via Circle CCTP
+7. After bridging completes (~2-5 minutes), user clicks "Stake" again
+8. Transaction succeeds with the unified ETH balance
+
+### Example Flow: Aave USDC Supply
+
+1. User visits Aave on Base and tries to supply 1000 USDC
+2. User has 300 USDC on Base, 400 on Ethereum, 300 on Arbitrum
+3. Extension detects 700 USDC deficit on Base
+4. Shows intent modal with breakdown of sources
+5. User approves → Nexus bridges 700 USDC from multiple chains to Base
+6. After arrival, Aave UI handles approval + supply automatically
+
+## 📦 Installation & Setup
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- A Chromium-based browser (Chrome, Edge, Brave, Arc)
+- A Web3 wallet extension (MetaMask, Rabby, etc.)
+
+### Build Instructions
+
+1. **Clone and Install**
+   ```bash
+   git clone <repository-url>
+   cd nexus-hyperliquid-poc
+   npm install
+   ```
+
+2. **Build the Extension**
+   ```bash
+   npm run build
+   ```
+
+3. **Create Distribution Zip (Optional)**
+   ```bash
+   npm run zip
+   # or build + zip in one command
+   npm run build-zip
+   ```
+
+### Load Extension in Browser
+
+1. Open Chrome and navigate to `chrome://extensions`
+2. Enable **Developer Mode** (toggle in top-right corner)
+3. Click **Load Unpacked**
+4. Select the `dist/` folder from the project directory
+5. The extension icon should appear in your browser toolbar
+
+### Development Mode
+
+For active development with hot reload:
 
 ```bash
-npm install
+npm run dev
 ```
 
-Build the extension:
+Then load the `dist/` folder as an unpacked extension. Changes will rebuild automatically.
 
-```bash
-npm run build
+## 🔧 Project Structure
+
+```
+nexus-hyperliquid-poc/
+├── src/
+│   ├── injected/
+│   │   ├── nexusCA.tsx          # Main content script & transaction interceptor
+│   │   ├── cache.ts             # Unified balance caching
+│   │   ├── caEvents.ts          # Nexus SDK event handlers
+│   │   ├── checkNexus.ts        # Nexus initialization checks
+│   │   ├── domModifier.ts       # DOM manipulation utilities
+│   │   └── networkInterceptor.ts # Network request interceptor
+│   ├── components/
+│   │   ├── intent-modal.tsx     # Bridge intent approval UI
+│   │   ├── allowance-modal.tsx  # Token allowance UI
+│   │   ├── event-modal.tsx      # Progress tracking UI
+│   │   └── expandable-row.tsx   # Collapsible UI components
+│   ├── utils/
+│   │   ├── constants.ts         # Token mappings & chain configs
+│   │   ├── multicall.ts         # Multicall contract ABIs
+│   │   ├── lido.abi.ts         # Lido protocol integration
+│   │   ├── aave.abi.ts         # Aave V3 protocol integration
+│   │   ├── lifi.abi.ts         # LiFi protocol integration
+│   │   └── publicClient.ts     # Viem public client setup
+│   ├── background.ts            # Service worker
+│   ├── popup.tsx               # Extension popup UI
+│   └── manifest.json           # Extension manifest
+├── public/                     # Static assets
+├── vite.config.ts             # Vite build configuration
+└── package.json
 ```
 
-Zip the built extension:
+## 🛠️ Technical Stack
 
-```bash
-npm run zip
-```
+- **Framework**: React 19 with TypeScript
+- **Build Tool**: Vite 7 with web extension plugin
+- **Web3 Libraries**: 
+  - Viem 2.33 (Ethereum interactions)
+  - @avail-project/nexus (Chain abstraction SDK)
+- **Browser APIs**: Chrome Extension Manifest V3
+- **Wallet Integration**: EIP-6963 (Multi-wallet discovery)
+- **Styling**: Shadow DOM with isolated CSS
 
-Build and zip the extension in a single step
+## 🎯 Supported Chains
 
-```bash
-npm run build-zip
-```
+- Ethereum Mainnet (Chain ID: 1)
+- Arbitrum One (Chain ID: 42161)
+- Base (Chain ID: 8453)
+- Optimism (Chain ID: 10)
+- Polygon (Chain ID: 137)
+- Avalanche C-Chain (Chain ID: 43114)
+- BNB Chain (Chain ID: 56)
+- HyperEVM (Chain ID: 999)
 
-## Extension Installation
+## 🔐 Security Considerations
 
-- Extract the zip file
-- Go to Chrome (or any Chromium browser) and type in `chrome://extensions` on the url bar, hit enter
-- Switch ON the `Developer Mode` on top right corner
-- Click `Load Unpacked` button on the top left corner and locate the extracted folder and click Open, this should load the extension in the browser
+- **Non-Custodial**: Extension never has access to private keys
+- **User Approval**: All bridge intents require explicit user confirmation
+- **Transaction Simulation**: Nexus SDK simulates all transactions before execution
+- **Shadow DOM Isolation**: UI components are isolated from dApp code
+- **Read-Only Balance Checks**: Extension only intercepts and analyzes transactions, doesn't modify them without approval
+
+## 🐛 Known Limitations
+
+- **Bridge Timing**: Cross-chain bridges take 2-5 minutes - users must manually retry transactions after bridging completes
+- **Gas Estimation**: Currently uses fixed gas reserves (0.002 ETH) for native token bridging
+- **Protocol Coverage**: Specialized integrations only cover major protocols (Lido, Aave, Hyperliquid) - other protocols use generic ERC20 detection
 
 ## Quirks
 
@@ -45,6 +192,20 @@ npm run build-zip
 - Currently only works on Hyperliquid
 - Uses Vite and React
 
-## License
+## 🤝 Contributing
+
+This is a proof-of-concept project demonstrating Nexus SDK integration. Contributions are welcome!
+
+## 📄 License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](https://www.apache.org/licenses/LICENSE-2.0) file for details.
+
+## 🔗 Links
+
+- [Avail Nexus SDK](https://github.com/availproject/nexus)
+- [Avail Project](https://www.availproject.org/)
+- [Extension Demo Video](https://github.com/user-attachments/assets/db4a9ff3-abf3-49c9-bf18-a476b0fdb8be)
+
+---
+
+**Built with ❤️ using Avail Nexus SDK**
