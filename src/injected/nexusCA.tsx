@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { TOKEN_MAPPING } from "../utils/constants";
 import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
+import { LidoAbi, LIDO_STETH_ADDRESS, LIDO_DOMAINS } from "../utils/lido.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
 import { setCAEvents } from "./caEvents";
@@ -1028,6 +1029,115 @@ function NexusApp() {
             const res = handler;
             debugInfo("BRIDGE Response", res);
             return originalRequest.apply(this, args);
+          }
+        }
+
+        // Lido Staking Integration - Detect ETH staking transactions
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          (params[0].to?.toLowerCase() === LIDO_STETH_ADDRESS.toLowerCase() ||
+            params[0].data.toLowerCase().startsWith("0xa1903eab") || // submit() function signature
+            params[0].data === "0x" || // Direct ETH send to Lido
+            (params[0].value && params[0].value !== "0x0")) // Any ETH transfer with value
+        ) {
+          // Check if this is a Lido staking domain
+          const isLidoDomain = LIDO_DOMAINS.some(domain => 
+            window.origin.includes(domain)
+          ) || window.origin.includes("lido");
+
+          if (isLidoDomain) {
+            const unifiedBalances = await fetchUnifiedBalances();
+            unifiedBalancesRef.current = unifiedBalances;
+            
+            // Get ETH amount to stake (from transaction value or function call)
+            let paramAmount = "0";
+            
+            if (params[0].value && params[0].value !== "0x0") {
+              // Direct ETH send
+              paramAmount = parseInt(params[0].value, 16).toString();
+            } else if (params[0].data.toLowerCase().startsWith("0xa1903eab")) {
+              // Lido submit() function call - ETH amount is in msg.value
+              const ethAmount = params[0].value || "0x0";
+              paramAmount = parseInt(ethAmount, 16).toString();
+            }
+            
+            debugInfo("LIDO STAKING DETECTED", {
+              amount: paramAmount,
+              value: params[0].value,
+              to: params[0].to,
+              origin: window.origin,
+              data: params[0].data?.substring(0, 10)
+            });
+
+            // Skip if no ETH is being sent (unless it's a function call to Lido contract)
+            if (paramAmount === "0" && !params[0].data.toLowerCase().startsWith("0xa1903eab")) {
+              return originalRequest.apply(this, args);
+            }
+
+            // Find ETH balance across all chains (native ETH)
+            const ethAsset = unifiedBalances.find((bal: any) =>
+              bal.symbol === "ETH" && 
+              bal.breakdown?.some((b: any) => 
+                b.contractAddress === "0x0000000000000000000000000000000000000000"
+              )
+            );
+
+            if (ethAsset) {
+              // Check if we have enough ETH on Ethereum mainnet
+              const ethereumEthBalance = ethAsset.breakdown.find(
+                (token: any) => 
+                  token.chain.id === 1 && 
+                  token.contractAddress === "0x0000000000000000000000000000000000000000"
+              );
+
+              const currentEthBalance = new Decimal(ethereumEthBalance?.balance || "0")
+                .mul(Decimal.pow(10, 18));
+
+              debugInfo("ETH BALANCE CHECK", {
+                current: currentEthBalance.toString(),
+                needed: paramAmount,
+                hasEnough: currentEthBalance.greaterThanOrEqualTo(paramAmount)
+              });
+
+              if (currentEthBalance.lessThan(paramAmount)) {
+                const requiredAmount = new Decimal(paramAmount)
+                  .minus(currentEthBalance)
+                  .div(Decimal.pow(10, 18))
+                  .toFixed();
+
+                requiredAmountRef.current = formatDecimalAmount(requiredAmount);
+                
+                debugInfo("BRIDGING ETH FOR LIDO STAKING", {
+                  required: requiredAmount,
+                  current: currentEthBalance.div(Decimal.pow(10, 18)).toString(),
+                  needed: new Decimal(paramAmount).div(Decimal.pow(10, 18)).toString()
+                });
+
+                const handler = await ca.bridge({
+                  amount: requiredAmount,
+                  token: "eth" as SUPPORTED_TOKENS,
+                  chainId: 1, // Ethereum mainnet
+                });
+
+                debugInfo("LIDO ETH BRIDGE Response", handler);
+                
+                if (!handler.success) {
+                  const errorMessage = {
+                    code: 4001,
+                    message: "User rejected the request.",
+                    details: "User denied ETH bridging for Lido staking.",
+                    version: "viem@2.33.3",
+                  };
+                  setError(true);
+                  throw errorMessage;
+                }
+                
+                const hashResponse = await originalRequest.apply(this, args);
+                setTxURL(hashResponse as string);
+                return hashResponse;
+              }
+            }
           }
         }
 

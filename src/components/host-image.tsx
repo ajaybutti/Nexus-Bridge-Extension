@@ -9,6 +9,8 @@ const DEFAULT_MAPPING: Record<string, string> = {
   "usefelix.xyz": `Felix`,
   "liminal.money": liminalLogo,
   "asterdex.com": "ASTER",
+  "lido.fi": "Lido",
+  "stake.lido.fi": "Lido",
 };
 
 const STYLE_MAPPING: Record<string, React.CSSProperties> = {
@@ -38,6 +40,20 @@ const STYLE_MAPPING: Record<string, React.CSSProperties> = {
     fontSize: "1.5rem",
     marginLeft: "-22px",
     marginTop: "12px",
+  },
+  "lido.fi": {
+    color: "#00A3FF",
+    fontSize: "1.8rem",
+    marginLeft: "-20px",
+    marginTop: "12px",
+    fontWeight: "bold",
+  },
+  "stake.lido.fi": {
+    color: "#00A3FF",
+    fontSize: "1.8rem",
+    marginLeft: "-20px",
+    marginTop: "12px",
+    fontWeight: "bold",
   },
 };
 

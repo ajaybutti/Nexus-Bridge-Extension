@@ -38,6 +38,7 @@ Browser.runtime
       injectProviderScript("src/injected/nexusCA.js");
       injectProviderScript("src/injected/networkInterceptor.js");
       injectProviderScript("src/injected/domModifier.js");
+      injectProviderScript("src/injected/lidoWalletSimulation.js");
     }
   })
   .catch((error) => {

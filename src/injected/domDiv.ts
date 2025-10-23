@@ -27,3 +27,11 @@ export const asterDexUnifiedBalanceDiv =
 export const asterDexTokenDiv =
   "div.flex.items-center.justify-between.cursor-pointer.bg-interactive-interactiveBg.pl-0.pr-3.py-0 .text-t-primary.text-body1.leading-5";
 export const asterDexModalWrapDiv = `[data-state="open"]`;
+
+// Lido DOM selectors
+export const lidoStakeAmountInput = 'input[data-testid="stake-amount-input"]';
+export const lidoStakeButton = 'button[data-testid="stake-button"]';
+export const lidoBalanceDiv = '[data-testid="eth-balance"]';
+export const lidoAmountWrapDiv = '[data-testid="stake-amount-section"]';
+export const lidoModalDiv = '[data-testid="stake-modal"]';
+export const lidoUnifiedBalanceDiv = '.unified-eth-balance';

@@ -47,6 +47,7 @@ export default defineConfig({
         "src/injected/nexusCA.tsx",
         "src/injected/networkInterceptor.ts",
         "src/injected/domModifier.ts",
+        "src/injected/lidoWalletSimulation.ts",
       ],
     }),
     nodePolyfillsFix({

@@ -10,6 +10,10 @@ export const TOKEN_MAPPING = {
       symbol: "USDT",
       decimals: 6,
     },
+    "0x0000000000000000000000000000000000000000": {
+      symbol: "ETH",
+      decimals: 18,
+    },
   },
   8453: {
     "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {
@@ -20,6 +24,10 @@ export const TOKEN_MAPPING = {
       symbol: "USDT",
       decimals: 6,
     },
+    "0x0000000000000000000000000000000000000000": {
+      symbol: "ETH",
+      decimals: 18,
+    },
   },
   10: {
     "0x0b2c639c533813f4aa9d7837caf62653d097ff85": {
@@ -29,6 +37,10 @@ export const TOKEN_MAPPING = {
     "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": {
       symbol: "USDT",
       decimals: 6,
+    },
+    "0x0000000000000000000000000000000000000000": {
+      symbol: "ETH",
+      decimals: 18,
     },
   },
   137: {
@@ -69,6 +81,10 @@ export const TOKEN_MAPPING = {
     "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": {
       symbol: "USDT",
       decimals: 6,
+    },
+    "0x0000000000000000000000000000000000000000": {
+      symbol: "ETH",
+      decimals: 18,
     },
   },
   999: {

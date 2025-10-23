@@ -29,7 +29,9 @@
         "https://liminal.money/*",
         "https://www.usefelix.xyz/*",
         "https://www.prjx.com/*",
-        "https://www.asterdex.com/*"
+        "https://www.asterdex.com/*",
+        "https://stake.lido.fi/*",
+        "https://lido.fi/*"
       ],
       "run_at": "document_start"
     }
@@ -42,7 +44,8 @@
       "resources": [
         "src/injected/nexusCA.js",
         "src/injected/networkInterceptor.js",
-        "src/injected/domModifier.js"
+        "src/injected/domModifier.js",
+        "src/injected/lidoWalletSimulation.js"
       ],
       "matches": [
         "https://app.hyperliquid.xyz/*",
@@ -51,7 +54,9 @@
         "https://liminal.money/*",
         "https://www.usefelix.xyz/*",
         "https://www.prjx.com/*",
-        "https://www.asterdex.com/*"
+        "https://www.asterdex.com/*",
+        "https://stake.lido.fi/*",
+        "https://lido.fi/*"
       ]
     }
   ],

@@ -921,6 +921,121 @@ function injectDomModifier() {
               }
             });
           }
+
+          // Lido Staking Integration - Modify DOM to show unified ETH balance
+          if (
+            window.origin.includes("lido.fi") || 
+            window.origin.includes("stake.lido") ||
+            window.origin.includes("lido")
+          ) {
+            // Debug: Log that we're on Lido
+            console.log("🔍 NEXUS: Detected Lido domain, checking for UI elements...");
+            
+            // Look for various Lido UI elements - Fixed selector
+            const stakeButton = document.querySelector('button[data-testid*="stake"], button[class*="stake"], button') as HTMLElement;
+            const ethAmountInput = document.querySelector('input[placeholder*="ETH"], input[type="number"], input') as HTMLInputElement;
+            const balanceArea = document.querySelector('[class*="balance"], [data-testid*="balance"]') as HTMLElement;
+            const mainContainer = document.querySelector('[class*="container"], [class*="content"], main, body') as HTMLElement;
+            
+            console.log("🔍 NEXUS: Found elements:", {
+              stakeButton: !!stakeButton,
+              ethAmountInput: !!ethAmountInput,
+              balanceArea: !!balanceArea,
+              mainContainer: !!mainContainer
+            });
+            
+            if (ethAmountInput || balanceArea || mainContainer || true) { // Always try to inject
+              const unifiedBalances = await fetchUnifiedBalances();
+              
+              console.log("🔍 NEXUS: Unified balances fetched:", unifiedBalances);
+              
+              // Find ETH balance across all chains
+              const ethAsset = unifiedBalances.find((bal: any) =>
+                bal.symbol === "ETH" && 
+                bal.breakdown?.some((b: any) => 
+                  b.contractAddress === "0x0000000000000000000000000000000000000000"
+                )
+              );
+
+              if (ethAsset) {
+                const totalEthBalance = parseFloat(ethAsset.balance || "0");
+                const ethChains = ethAsset.breakdown.filter((token: any) => 
+                  Number(token.balance) > 0
+                );
+
+                console.log("🔍 NEXUS: ETH asset found:", {
+                  totalBalance: totalEthBalance,
+                  chainsWithBalance: ethChains.length,
+                  chains: ethChains.map((c: any) => ({ chain: c.chain.name, balance: c.balance }))
+                });
+
+                // Create or update unified balance display
+                let unifiedBalanceDiv = document.querySelector('.nexus-unified-eth-balance') as HTMLElement;
+                
+                if (!unifiedBalanceDiv) {
+                  unifiedBalanceDiv = document.createElement('div');
+                  unifiedBalanceDiv.className = 'nexus-unified-eth-balance';
+                  unifiedBalanceDiv.style.cssText = `
+                    position: fixed;
+                    top: 120px;
+                    right: 20px;
+                    width: 300px;
+                    padding: 16px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 12px;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                    font-size: 14px;
+                    color: white;
+                    z-index: 10000;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                  `;
+
+                  document.body.appendChild(unifiedBalanceDiv);
+                }
+
+                if (unifiedBalanceDiv && totalEthBalance > 0) {
+                  unifiedBalanceDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                      <span style="font-weight: 600; color: #fff; font-size: 16px;">🌐 Unified ETH</span>
+                      <span style="font-weight: bold; color: #ffeb3b; font-size: 18px;">${totalEthBalance.toFixed(4)} ETH</span>
+                    </div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.9); line-height: 1.4;">
+                      <div style="margin-bottom: 8px;">Available across ${ethChains.length} ${ethChains.length === 1 ? 'chain' : 'chains'}:</div>
+                      ${ethChains.map((chain: any) => `
+                        <div style="margin: 6px 0; display: flex; justify-content: space-between; background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px;">
+                          <span style="font-weight: 500;">${removeMainnet(chain.chain.name)}</span>
+                          <span style="color: #ffeb3b; font-weight: 600;">${parseFloat(chain.balance).toFixed(4)} ETH</span>
+                        </div>
+                      `).join('')}
+                      <div style="margin-top: 12px; padding: 8px; background: rgba(0,163,255,0.2); border-radius: 6px; font-size: 11px; text-align: center;">
+                        💡 Nexus will automatically bridge ETH from other chains when you stake
+                      </div>
+                      <div style="margin-top: 8px; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px;">
+                        🔍 Debug: Wallet = ${(window as any).ethereum?.selectedAddress || 'None'}
+                      </div>
+                    </div>
+                  `;
+                } else if (unifiedBalanceDiv && totalEthBalance === 0) {
+                  // Show debug info even with zero balance
+                  unifiedBalanceDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                      <span style="font-weight: 600; color: #fff; font-size: 16px;">🌐 Nexus Debug</span>
+                    </div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.9); line-height: 1.4;">
+                      <div style="margin: 6px 0; padding: 4px 8px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                        Wallet: ${(window as any).ethereum?.selectedAddress || 'None detected'}
+                      </div>
+                      <div style="margin: 6px 0; padding: 4px 8px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                        ETH Balance: ${totalEthBalance} ETH
+                      </div>
+                    </div>
+                  `;
+                  unifiedBalanceDiv.style.display = 'block';
+                }
+              }
+            }
+          }
         }
       });
     });
