@@ -144,8 +144,19 @@ const getTextFromStep = (
       break;
 
     case "INTENT_FULFILLED":
+      // Get destination chain name dynamically
+      const destinationChainName = 
+        chainId === 1 ? "Ethereum Mainnet" : 
+        chainId === 999 ? "HyperEVM" :
+        chainId === 42161 ? "Arbitrum One" :
+        chainId === 8453 ? "Base" :
+        chainId === 10 ? "Optimism" :
+        chainId === 137 ? "Polygon" :
+        chainId === 43114 ? "Avalanche" :
+        chainId === 56 ? "BNB Chain" :
+        `Chain ${chainId}`;
       varOcg = {
-        leftText: done ? `Received on HyperEVM` : `Receiving on HyperEVM `,
+        leftText: done ? `Received on ${destinationChainName}` : `Receiving on ${destinationChainName}`,
         rightText: done ? `Done` : `Not Supplied`,
       };
       break;

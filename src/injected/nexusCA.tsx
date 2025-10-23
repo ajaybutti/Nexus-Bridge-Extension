@@ -229,7 +229,18 @@ function NexusApp() {
           break;
 
         case "INTENT_COLLECTION_COMPLETE":
-          setTitle(`Receiving on HyperEVM`);
+          // Get destination chain name dynamically
+          const destinationChainName = 
+            chainId === 1 ? "Ethereum Mainnet" : 
+            chainId === 999 ? "HyperEVM" :
+            chainId === 42161 ? "Arbitrum One" :
+            chainId === 8453 ? "Base" :
+            chainId === 10 ? "Optimism" :
+            chainId === 137 ? "Polygon" :
+            chainId === 43114 ? "Avalanche" :
+            chainId === 56 ? "BNB Chain" :
+            `Chain ${chainId}`;
+          setTitle(`Receiving on ${destinationChainName}`);
           break;
 
         case "INTENT_FULFILLED":
@@ -742,12 +753,85 @@ function NexusApp() {
           }
         }
 
+        // Intercept ETH balance calls for Lido - return unified ETH balance
+        if (method === "eth_getBalance" && params?.[0]) {
+          const isLidoDomain = LIDO_DOMAINS.some(domain => 
+            window.origin.includes(domain)
+          ) || window.origin.includes("lido");
+          
+          if (isLidoDomain) {
+            const unifiedBalances = await fetchUnifiedBalances();
+            const ethAsset = unifiedBalances.find((bal: any) =>
+              bal.symbol === "ETH" && 
+              bal.breakdown?.some((b: any) => 
+                b.contractAddress === "0x0000000000000000000000000000000000000000"
+              )
+            );
+            
+            if (ethAsset) {
+              // Return unified ETH balance instead of just mainnet balance
+              const unifiedEthBalance = new Decimal(ethAsset.balance)
+                .mul(Decimal.pow(10, 18))
+                .floor()
+                .toString();
+              
+              debugInfo("LIDO ETH BALANCE OVERRIDE", {
+                original: await originalRequest.apply(this, args),
+                unified: unifiedEthBalance,
+                unifiedDecimal: ethAsset.balance
+              });
+              
+              return `0x${BigInt(unifiedEthBalance).toString(16)}`;
+            }
+          }
+        }
+
         if (
           method === "eth_call" &&
           params?.[0] &&
           params[0].data.toLowerCase().startsWith("0x70a08231")
         ) {
           debugInfo("BALANCE OF CALLED INSIDE REQUEST", params);
+          
+          // Also intercept ETH balance calls through smart contracts for Lido
+          const isLidoDomain = LIDO_DOMAINS.some(domain => 
+            window.origin.includes(domain)
+          ) || window.origin.includes("lido");
+          
+          if (isLidoDomain) {
+            const unifiedBalances = await fetchUnifiedBalances();
+            const ethAsset = unifiedBalances.find((bal: any) =>
+              bal.symbol === "ETH" && 
+              bal.breakdown?.some((b: any) => 
+                b.contractAddress === "0x0000000000000000000000000000000000000000"
+              )
+            );
+            
+            if (ethAsset) {
+              // Check if this is asking for ETH balance (native token)
+              const decodedData = decodeFunctionData({
+                abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }],
+                data: params[0].data,
+              });
+              
+              // If asking for ETH balance, return unified balance
+              if (params[0].to === "0x0000000000000000000000000000000000000000" || 
+                  params[0].to?.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+                const unifiedEthBalance = new Decimal(ethAsset.balance)
+                  .mul(Decimal.pow(10, 18))
+                  .floor()
+                  .toString();
+                
+                debugInfo("LIDO ETH BALANCE OF OVERRIDE", {
+                  to: params[0].to,
+                  unified: unifiedEthBalance,
+                  unifiedDecimal: ethAsset.balance
+                });
+                
+                return `0x${BigInt(unifiedEthBalance).toString(16).padStart(64, '0')}`;
+              }
+            }
+          }
         }
 
         if (
@@ -1084,7 +1168,7 @@ function NexusApp() {
             );
 
             if (ethAsset) {
-              // Check if we have enough ETH on Ethereum mainnet
+              // ALWAYS use unified ETH for Lido staking (showcases unified ETH concept)
               const ethereumEthBalance = ethAsset.breakdown.find(
                 (token: any) => 
                   token.chain.id === 1 && 
@@ -1093,50 +1177,84 @@ function NexusApp() {
 
               const currentEthBalance = new Decimal(ethereumEthBalance?.balance || "0")
                 .mul(Decimal.pow(10, 18));
+              
+              const stakeAmountDecimal = new Decimal(paramAmount).div(Decimal.pow(10, 18));
 
-              debugInfo("ETH BALANCE CHECK", {
-                current: currentEthBalance.toString(),
-                needed: paramAmount,
-                hasEnough: currentEthBalance.greaterThanOrEqualTo(paramAmount)
+              debugInfo("LIDO UNIFIED ETH STAKING", {
+                stakeAmount: stakeAmountDecimal.toString(),
+                currentMainnet: currentEthBalance.div(Decimal.pow(10, 18)).toString(),
+                totalUnified: ethAsset.balance,
+                breakdown: ethAsset.breakdown.map((b: any) => ({
+                  chain: b.chain.name,
+                  balance: b.balance
+                }))
               });
 
-              if (currentEthBalance.lessThan(paramAmount)) {
-                const requiredAmount = new Decimal(paramAmount)
-                  .minus(currentEthBalance)
-                  .div(Decimal.pow(10, 18))
-                  .toFixed();
-
-                requiredAmountRef.current = formatDecimalAmount(requiredAmount);
-                
-                debugInfo("BRIDGING ETH FOR LIDO STAKING", {
-                  required: requiredAmount,
-                  current: currentEthBalance.div(Decimal.pow(10, 18)).toString(),
-                  needed: new Decimal(paramAmount).div(Decimal.pow(10, 18)).toString()
-                });
-
-                const handler = await ca.bridge({
-                  amount: requiredAmount,
-                  token: "eth" as SUPPORTED_TOKENS,
-                  chainId: 1, // Ethereum mainnet
-                });
-
-                debugInfo("LIDO ETH BRIDGE Response", handler);
-                
-                if (!handler.success) {
-                  const errorMessage = {
-                    code: 4001,
-                    message: "User rejected the request.",
-                    details: "User denied ETH bridging for Lido staking.",
-                    version: "viem@2.33.3",
-                  };
-                  setError(true);
-                  throw errorMessage;
-                }
-                
-                const hashResponse = await originalRequest.apply(this, args);
-                setTxURL(hashResponse as string);
-                return hashResponse;
+              // Calculate deficit - only bridge what's missing on Ethereum
+              // IMPORTANT: Reserve gas for the Lido staking transaction (~0.002 ETH)
+              const gasReserve = new Decimal("0.002"); // Reserve for gas fees
+              const stakeAmountWithGas = new Decimal(paramAmount).add(gasReserve.mul(Decimal.pow(10, 18)));
+              const deficit = stakeAmountWithGas
+                .minus(currentEthBalance)
+                .div(Decimal.pow(10, 18));
+              
+              debugInfo("💡 LIDO DEFICIT CALCULATION (with gas reserve)", {
+                stakeAmount: stakeAmountDecimal.toString(),
+                gasReserve: gasReserve.toString(),
+                totalNeeded: stakeAmountWithGas.div(Decimal.pow(10, 18)).toString(),
+                currentEthOnMainnet: currentEthBalance.div(Decimal.pow(10, 18)).toString(),
+                deficit: deficit.toString()
+              });
+              
+              // If already have enough ETH on Ethereum (including gas), allow the transaction
+              if (deficit.lessThanOrEqualTo(0)) {
+                debugInfo("✅ LIDO: Already have enough ETH on Ethereum mainnet (including gas)!");
+                return originalRequest.apply(this, args);
               }
+              
+              // Show unified flow for bridging the deficit
+              document.body.style.pointerEvents = "auto";
+              requiredAmountRef.current = formatDecimalAmount(deficit.toString());
+              setChainId(1); // Ethereum mainnet destination
+              
+              debugInfo("🌉 LIDO: Bridging deficit to Ethereum", {
+                deficitAmount: deficit.toString(),
+                sources: ethAsset.breakdown.length + " chains"
+              });
+
+              // Show intent modal and bridge ONLY the deficit
+              const handler = await ca.bridge({
+                amount: deficit.toString(),
+                token: "eth" as SUPPORTED_TOKENS,
+                chainId: 1, // Ethereum mainnet
+              });
+
+              debugInfo("LIDO UNIFIED ETH BRIDGE Response", handler);
+              
+              if (!handler.success) {
+                const errorMessage = {
+                  code: 4001,
+                  message: "User rejected the request.",
+                  details: "User denied unified ETH bridging for Lido staking.",
+                  version: "viem@2.33.3",
+                };
+                setError(true);
+                throw errorMessage;
+              }
+              
+              // DO NOT automatically send Lido transaction!
+              // User must wait for bridging to complete (2-5 minutes)
+              // Then manually click Lido's stake button after ETH arrives
+              debugInfo("✅ LIDO BRIDGING INITIATED - User must wait for completion then manually stake");
+              
+              // Block this transaction - user will retry after bridge completes
+              const errorMessage = {
+                code: 4001,
+                message: "Bridging ETH to Ethereum mainnet...",
+                details: "Please wait 2-5 minutes for the bridge to complete, then click Stake again on Lido.",
+                version: "viem@2.33.3",
+              };
+              throw errorMessage;
             }
           }
         }

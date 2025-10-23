@@ -1011,11 +1011,34 @@ function injectDomModifier() {
                       <div style="margin-top: 12px; padding: 8px; background: rgba(0,163,255,0.2); border-radius: 6px; font-size: 11px; text-align: center;">
                         💡 Nexus will automatically bridge ETH from other chains when you stake
                       </div>
+                      <button id="nexus-stake-eth-btn" style="
+                        width: 100%;
+                        margin-top: 12px;
+                        padding: 10px;
+                        background: linear-gradient(45deg, #00ff88, #00d4ff);
+                        border: none;
+                        border-radius: 8px;
+                        color: #000;
+                        font-weight: bold;
+                        font-size: 14px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                      " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        🚀 Stake with Unified ETH
+                      </button>
                       <div style="margin-top: 8px; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px;">
                         🔍 Debug: Wallet = ${(window as any).ethereum?.selectedAddress || 'None'}
                       </div>
                     </div>
                   `;
+                  
+                  // Add click handler for the stake button
+                  const stakeButton = unifiedBalanceDiv.querySelector('#nexus-stake-eth-btn') as HTMLButtonElement;
+                  if (stakeButton) {
+                    stakeButton.addEventListener('click', () => {
+                      openUnifiedEthStakeModal(totalEthBalance, ethChains);
+                    });
+                  }
                 } else if (unifiedBalanceDiv && totalEthBalance === 0) {
                   // Show debug info even with zero balance
                   unifiedBalanceDiv.innerHTML = `
@@ -1054,6 +1077,264 @@ function injectDomModifier() {
       });
     }
   }
+}
+
+// Function to open unified ETH stake modal
+function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
+  console.log("🚀 NEXUS: Opening unified ETH stake modal");
+  
+  // Remove existing modal if present
+  const existingModal = document.querySelector('.nexus-stake-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.className = 'nexus-stake-modal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    backdrop-filter: blur(5px);
+  `;
+  
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 16px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">🌐 Stake with Unified ETH</h2>
+      <p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 14px;">Enter amount to stake from all your chains</p>
+    </div>
+    
+    <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 600; color: #fff;">Available Balance</span>
+        <span style="font-weight: bold; color: #00ff88; font-size: 18px;">${totalEthBalance.toFixed(4)} ETH</span>
+      </div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.8);">
+        ${ethChains.map((chain: any) => `
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>${removeMainnet(chain.chain.name)}</span>
+            <span style="color: #ffeb3b;">${parseFloat(chain.balance).toFixed(4)} ETH</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: #fff;">
+        ETH Amount to Stake
+      </label>
+      <div style="position: relative;">
+        <input type="number" id="nexus-eth-amount" placeholder="0.0" step="0.0001" max="${totalEthBalance}" 
+               style="
+                 width: 100%;
+                 padding: 16px 50px 16px 16px;
+                 background: rgba(255,255,255,0.1);
+                 border: 2px solid rgba(255,255,255,0.2);
+                 border-radius: 12px;
+                 color: white;
+                 font-size: 18px;
+                 font-weight: 600;
+                 outline: none;
+                 transition: all 0.3s ease;
+                 box-sizing: border-box;
+               " 
+               onfocus="this.style.borderColor='#00ff88'"
+               onblur="this.style.borderColor='rgba(255,255,255,0.2)'">
+        <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600;">ETH</span>
+      </div>
+      <button id="nexus-max-btn" style="
+        margin-top: 8px;
+        padding: 6px 12px;
+        background: rgba(0,255,136,0.2);
+        border: 1px solid #00ff88;
+        border-radius: 6px;
+        color: #00ff88;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.background='rgba(0,255,136,0.3)'" onmouseout="this.style.background='rgba(0,255,136,0.2)'">
+        MAX: ${totalEthBalance.toFixed(4)} ETH
+      </button>
+    </div>
+    
+    <div style="display: flex; gap: 12px;">
+      <button id="nexus-cancel-btn" style="
+        flex: 1;
+        padding: 14px;
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: 10px;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+        Cancel
+      </button>
+      <button id="nexus-confirm-btn" style="
+        flex: 2;
+        padding: 14px;
+        background: linear-gradient(45deg, #00ff88, #00d4ff);
+        border: none;
+        border-radius: 10px;
+        color: #000;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        🚀 Stake with Unified ETH
+      </button>
+    </div>
+    
+    <div style="margin-top: 16px; padding: 12px; background: rgba(0,163,255,0.1); border-radius: 8px; font-size: 12px; text-align: center; color: rgba(255,255,255,0.8);">
+      💡 Nexus will bridge ETH from multiple chains and automatically stake on Lido
+    </div>
+  `;
+  
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+  
+  // Add event listeners
+  const ethAmountInput = modalOverlay.querySelector('#nexus-eth-amount') as HTMLInputElement;
+  const maxBtn = modalOverlay.querySelector('#nexus-max-btn') as HTMLButtonElement;
+  const cancelBtn = modalOverlay.querySelector('#nexus-cancel-btn') as HTMLButtonElement;
+  const confirmBtn = modalOverlay.querySelector('#nexus-confirm-btn') as HTMLButtonElement;
+  
+  // Max button functionality
+  maxBtn.addEventListener('click', () => {
+    ethAmountInput.value = totalEthBalance.toString();
+  });
+  
+  // Cancel button
+  cancelBtn.addEventListener('click', () => {
+    modalOverlay.remove();
+  });
+  
+  // Confirm button - Calculate deficit and trigger bridging
+  confirmBtn.addEventListener('click', async () => {
+    const stakeAmount = parseFloat(ethAmountInput.value);
+    
+    if (!stakeAmount || stakeAmount <= 0) {
+      alert('Please enter a valid ETH amount');
+      return;
+    }
+    
+    if (stakeAmount > totalEthBalance) {
+      alert(`Amount exceeds available balance of ${totalEthBalance.toFixed(4)} ETH`);
+      return;
+    }
+    
+    console.log(`🚀 NEXUS: User wants to bridge ${stakeAmount} ETH to Ethereum mainnet`);
+    
+    // Disable button to prevent double-clicks
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '⏳ Initiating bridging...';
+    confirmBtn.style.opacity = '0.6';
+    
+    try {
+      // Calculate how much we're short on Ethereum mainnet
+      const ethereumBalance = ethChains.find((chain: any) => chain.chain.name === 'Ethereum Mainnet');
+      const currentEthBalance = parseFloat(ethereumBalance?.balance || '0');
+      
+      // Reserve ETH for gas fees (approximately 0.002 ETH for Lido staking)
+      const gasReserve = 0.002;
+      const stakeAmountWithGas = stakeAmount + gasReserve;
+      const deficit = stakeAmountWithGas - currentEthBalance;
+      
+      console.log(`💡 NEXUS: Ethereum has ${currentEthBalance} ETH, need ${stakeAmount} ETH + ${gasReserve} ETH gas = ${stakeAmountWithGas} ETH, deficit: ${deficit} ETH`);
+      
+      if (deficit <= 0) {
+        // No bridging needed - user has enough on mainnet (including gas)
+        alert(`✅ You already have enough ETH on Ethereum mainnet (including gas)! You can stake directly on Lido.`);
+        modalOverlay.remove();
+        return;
+      }
+      
+      // Access the Nexus SDK that was initialized in nexusCA.tsx
+      if (!(window as any).nexus) {
+        throw new Error('Nexus SDK not initialized');
+      }
+      
+      console.log(`💫 NEXUS: Calling ca.bridge() to bridge ${deficit.toFixed(6)} ETH deficit (including ${gasReserve} ETH gas reserve) to Ethereum mainnet`);
+      
+      // Bridge ONLY the deficit amount from other chains
+      const bridgeResult = await (window as any).nexus.bridge({
+        amount: deficit.toString(),
+        token: 'eth',
+        chainId: 1, // Ethereum mainnet
+      });
+      
+      console.log(`✅ NEXUS: Bridge result:`, bridgeResult);
+      
+      if (bridgeResult.success) {
+        // Success! Auto-fill Lido's input and close modal
+        alert(`✅ Successfully bridged ${deficit.toFixed(6)} ETH to Ethereum mainnet!\n\nAmount includes ${gasReserve} ETH gas reserve.\n\nLido's input will be auto-filled with ${stakeAmount.toFixed(4)} ETH.\n\nClick Lido's stake button to complete!`);
+        
+        // Auto-fill Lido's ETH amount input
+        setTimeout(() => {
+          const lidoInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+          if (lidoInput) {
+            lidoInput.value = stakeAmount.toString();
+            // Trigger input event so Lido's validation updates
+            lidoInput.dispatchEvent(new Event('input', { bubbles: true }));
+            console.log(`✅ NEXUS: Auto-filled Lido input with ${stakeAmount} ETH`);
+          }
+        }, 500);
+        
+        modalOverlay.remove();
+      } else {
+        // User rejected or bridging failed
+        console.log('❌ NEXUS: Bridging was rejected or failed');
+        alert('Bridging was cancelled or failed. Please try again.');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '🚀 Stake with Unified ETH';
+        confirmBtn.style.opacity = '1';
+      }
+      
+    } catch (error: any) {
+      console.error('❌ NEXUS: Error during unified ETH bridging:', error);
+      alert(`Failed to initiate bridging: ${error?.message || error}`);
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '🚀 Stake with Unified ETH';
+      confirmBtn.style.opacity = '1';
+    }
+  });
+  
+  // Close on overlay click
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      modalOverlay.remove();
+    }
+  });
+  
+  // Focus on input
+  setTimeout(() => {
+    ethAmountInput.focus();
+  }, 100);
 }
 
 injectDomModifier();

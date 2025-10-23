@@ -595,7 +595,9 @@ export default function IntentModal({
     if (!intentModal || isRefreshing) return;
     intentModal.allow();
     setIntentModal(null);
-  }, [intentModal, setIntentModal, isRefreshing]);
+    // Keep the progress modal open after confirming intent
+    setIntentStepsOpen(true);
+  }, [intentModal, setIntentModal, isRefreshing, setIntentStepsOpen]);
 
   // Auto-refresh intent every 5 seconds
   useEffect(() => {
