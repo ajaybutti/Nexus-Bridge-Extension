@@ -23,7 +23,8 @@ import {
 } from "./domDiv";
 import { removeMainnet } from "../utils/multicall";
 import { getChainName } from "../utils/lib";
-import { stakeEthWithLido } from "../utils/lido-stake";
+import { extractVaultAddressFromUrl, approveAndDepositToVault } from "../utils/morpho-vault";
+import { stakeEthWithLido, getStEthBalance } from "../utils/lido-stake";
 
 let prevAssetSymbols: string[] = [];
 
@@ -440,13 +441,40 @@ function openLidoUnifiedEthModal(ethAsset: any) {
 }
 
 // Function to open unified USDC supply modal for Aave
-function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[]) {
+async function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[]) {
   console.log("🏦 NEXUS: Opening unified USDC supply modal for Aave");
   
   // Remove existing modal if present
   const existingModal = document.querySelector('.nexus-aave-modal');
   if (existingModal) {
     existingModal.remove();
+  }
+
+  // Detect current chain dynamically FIRST
+  let targetChainId = 137; // Default fallback to Polygon
+  let targetChainName = "Polygon";
+  
+  try {
+    const currentChainId = await (window as any).ethereum?.request({ method: 'eth_chainId' });
+    if (currentChainId) {
+      targetChainId = parseInt(currentChainId, 16);
+      
+      // Map common chain IDs to readable names
+      const chainNames: { [key: number]: string } = {
+        1: "Ethereum",
+        10: "Optimism", 
+        56: "BSC",
+        137: "Polygon",
+        8453: "Base",
+        42161: "Arbitrum",
+        43114: "Avalanche"
+      };
+      
+      targetChainName = chainNames[targetChainId] || `Chain ${targetChainId}`;
+      console.log(`🏦 NEXUS: Detected current chain: ${targetChainName} (${targetChainId})`);
+    }
+  } catch (error) {
+    console.log("🏦 NEXUS: Failed to detect chain, using Polygon as fallback");
   }
   
   // Create modal overlay
@@ -503,26 +531,102 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
     
     <div style="margin-bottom: 20px;">
       <label style="display: block; margin-bottom: 8px; font-weight: 600;">USDC Amount to Supply</label>
-      <input 
-        type="number" 
-        id="usdc-amount-input" 
-        placeholder="100"
-        step="0.01"
-        max="${totalUsdcBalance}"
-        style="
-          width: 100%;
-          padding: 14px;
-          border: 1px solid rgba(255,255,255,0.3);
-          border-radius: 8px;
+      <div style="position: relative;">
+        <input 
+          type="number" 
+          id="usdc-amount-input" 
+          placeholder="100.00"
+          step="0.01"
+          min="0.01"
+          max="${totalUsdcBalance}"
+          inputmode="decimal"
+          style="
+            width: 100%;
+            padding: 14px 60px 14px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            -moz-appearance: textfield;
+          "
+        />
+        <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 2px;">
+          <button id="increment-btn" style="
+            width: 24px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">▲</button>
+          <button id="decrement-btn" style="
+            width: 24px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">▼</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <button id="quick-25" style="
+          flex: 1;
+          padding: 8px;
           background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
           color: white;
-          font-size: 16px;
-          font-family: inherit;
-          box-sizing: border-box;
-        "
-      />
+          font-size: 12px;
+          cursor: pointer;
+        ">25%</button>
+        <button id="quick-50" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">50%</button>
+        <button id="quick-75" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">75%</button>
+        <button id="quick-max" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">MAX</button>
+      </div>
       <div style="font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px;">
-        Min: $1 USDC • Max: $${totalUsdcBalance.toFixed(2)} USDC
+        Min: $0.01 USDC • Max: $${totalUsdcBalance.toFixed(2)} USDC
       </div>
     </div>
 
@@ -539,16 +643,62 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
       transition: all 0.3s ease;
     ">
       🚀 Bridge + Supply to Aave
-      <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Polygon then supply automatically</div>
+      <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to ${targetChainName} then supply automatically</div>
     </button>
   `;
 
   modalOverlay.appendChild(modalContent);
   document.body.appendChild(modalOverlay);
 
-  // Get input element
+  // Get input element and control buttons
   const usdcAmountInput = modalContent.querySelector('#usdc-amount-input') as HTMLInputElement;
   const bridgeSupplyBtn = modalContent.querySelector('#bridge-supply-btn') as HTMLButtonElement;
+  
+  // Get control buttons
+  const incrementBtn = modalContent.querySelector('#increment-btn') as HTMLButtonElement;
+  const decrementBtn = modalContent.querySelector('#decrement-btn') as HTMLButtonElement;
+  const quick25Btn = modalContent.querySelector('#quick-25') as HTMLButtonElement;
+  const quick50Btn = modalContent.querySelector('#quick-50') as HTMLButtonElement;
+  const quick75Btn = modalContent.querySelector('#quick-75') as HTMLButtonElement;
+  const quickMaxBtn = modalContent.querySelector('#quick-max') as HTMLButtonElement;
+
+  // Ensure input is enabled and accessible
+  if (usdcAmountInput) {
+    usdcAmountInput.disabled = false;
+    usdcAmountInput.readOnly = false;
+    usdcAmountInput.style.pointerEvents = 'auto';
+    console.log("🏦 NEXUS: Enhanced input controls ready");
+  }
+
+  // Add increment/decrement functionality
+  incrementBtn?.addEventListener('click', () => {
+    const current = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.min(current + 0.1, totalUsdcBalance);
+    usdcAmountInput.value = newValue.toFixed(2);
+  });
+
+  decrementBtn?.addEventListener('click', () => {
+    const current = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.max(current - 0.1, 0.01);
+    usdcAmountInput.value = newValue.toFixed(2);
+  });
+
+  // Add quick amount buttons
+  quick25Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.25).toFixed(2);
+  });
+
+  quick50Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.5).toFixed(2);
+  });
+
+  quick75Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.75).toFixed(2);
+  });
+
+  quickMaxBtn?.addEventListener('click', () => {
+    usdcAmountInput.value = totalUsdcBalance.toFixed(2);
+  });
 
   // Close modal on overlay click
   modalOverlay.addEventListener('click', (e) => {
@@ -566,6 +716,11 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
       return;
     }
 
+    if (supplyAmount < 0.01) {
+      alert('Minimum amount is $0.01 USDC');
+      return;
+    }
+
     if (supplyAmount > totalUsdcBalance) {
       alert(`Amount exceeds your total USDC balance of $${totalUsdcBalance.toFixed(2)}`);
       return;
@@ -575,41 +730,45 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
     bridgeSupplyBtn.innerHTML = '⏳ Bridging...';
 
     try {
-      console.log(`🏦 NEXUS: Bridging $${supplyAmount} USDC to Polygon for Aave supply`);
+      console.log(`🏦 NEXUS: Bridging $${supplyAmount} USDC to ${targetChainName} (${targetChainId}) for Aave supply`);
       
-      // Set destination to Polygon for Aave
+      // Set destination to current chain where user wants to supply
       if ((window as any).nexus?.setDestinationChainId) {
-        (window as any).nexus.setDestinationChainId(137); // Polygon mainnet
-        console.log("🏦 NEXUS: Set destination chainId to 137 (Polygon)");
+        (window as any).nexus.setDestinationChainId(targetChainId);
+        console.log(`🏦 NEXUS: Set destination chainId to ${targetChainId} (${targetChainName})`);
       }
       
       const bridgeResult = await (window as any).nexus.bridge({
         amount: supplyAmount.toString(),
         token: 'usdc',
-        chainId: 137, // Polygon
+        chainId: targetChainId,
       });
       
       if (bridgeResult.success) {
         modalOverlay.remove();
-        alert(`🎉 Bridge Successful!\n\n✅ Bridged $${supplyAmount} USDC to Polygon\n\nYou can now supply to Aave manually on Polygon.`);
+        alert(`🎉 Bridge Successful!\n\n✅ Bridged $${supplyAmount} USDC to ${targetChainName}\n\nYou can now supply to Aave manually on ${targetChainName}.`);
       } else {
         bridgeSupplyBtn.disabled = false;
-        bridgeSupplyBtn.innerHTML = '🚀 Bridge + Supply to Aave<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Polygon then supply automatically</div>';
+        bridgeSupplyBtn.innerHTML = `🚀 Bridge + Supply to Aave<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to ${targetChainName} then supply automatically</div>`;
         alert('Bridging was cancelled or failed. Please try again.');
       }
       
     } catch (error: any) {
       console.error('🏦 NEXUS: Error during unified USDC bridging:', error);
       bridgeSupplyBtn.disabled = false;
-      bridgeSupplyBtn.innerHTML = '🚀 Bridge + Supply to Aave<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Polygon then supply automatically</div>';
+      bridgeSupplyBtn.innerHTML = `🚀 Bridge + Supply to Aave<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to ${targetChainName} then supply automatically</div>`;
       alert(`Failed to initiate bridging: ${error?.message || error}`);
     }
   });
   
-  // Focus on input
+  // Enhanced focus on input
   setTimeout(() => {
-    usdcAmountInput.focus();
-  }, 100);
+    if (usdcAmountInput) {
+      usdcAmountInput.focus();
+      usdcAmountInput.click(); // Additional focus attempt
+      console.log("🏦 NEXUS: Enhanced input focused and ready for typing");
+    }
+  }, 200);
 }
 
 function injectDomModifier() {
