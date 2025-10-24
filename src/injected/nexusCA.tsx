@@ -20,6 +20,7 @@ import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
 import { LidoAbi, LIDO_STETH_ADDRESS, LIDO_DOMAINS } from "../utils/lido.abi";
 import { AaveV3PoolAbi, AAVE_V3_POOL_ADDRESSES, USDC_ADDRESSES, AAVE_DOMAINS, AAVE_SUPPLY_FUNCTION_SIG } from "../utils/aave.abi";
+import { MorphoVaultAbi, MORPHO_VAULT_ADDRESSES, MORPHO_USDC_ADDRESSES, MORPHO_DOMAINS, MORPHO_DEPOSIT_FUNCTION_SIG } from "../utils/morpho.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
 import { setCAEvents } from "./caEvents";
@@ -168,17 +169,18 @@ function NexusApp() {
 
   const handleExpectedSteps = (data: Step[]) => {
     try {
-      // Check if this is Aave flow (Base chain) - use destination chainId if available
+      // Check if this is Aave or Morpho flow (Base chain) - use destination chainId if available
       const targetChainId = destinationChainIdRef.current || chainId;
       const isAaveFlow = targetChainId === 8453 && window.location.hostname.includes("aave.com");
+      const isMorphoFlow = targetChainId === 8453 && window.location.hostname.includes("morpho.org");
       
       const newSteps = [
         ...data.map((s) => ({
           ...s,
           done: false,
         })),
-        // Don't add SUBMIT_TRANSACTION step for Aave - user will manually approve & supply
-        ...(!isAaveFlow ? [{
+        // Don't add SUBMIT_TRANSACTION step for Aave or Morpho - user will manually approve & supply/deposit
+        ...(!isAaveFlow && !isMorphoFlow ? [{
           type: "SUBMIT_TRANSACTION",
           typeID: "ST",
           done: false,
@@ -254,8 +256,10 @@ function NexusApp() {
           break;
 
         case "INTENT_FULFILLED":
-          // Check if this is Aave USDC bridging (Base chain, no auto-submit)
+          // Check if this is Aave or Morpho USDC bridging (Base chain, no auto-submit)
           const isAaveFlow = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("aave.com");
+          const isMorphoFlow = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("morpho.org");
+          
           if (isAaveFlow) {
             setTitle("Switching to Base...");
             // Switch to Base chain after bridging completes
@@ -268,15 +272,28 @@ function NexusApp() {
               console.error("Failed to switch to Base:", error);
               setTitle("Bridging Complete - Switch to Base Manually");
             });
+          } else if (isMorphoFlow) {
+            setTitle("Switching to Base...");
+            // Switch to Base chain after bridging completes
+            (window as any).ethereum?.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x2105" }], // Base = 8453 = 0x2105
+            }).then(() => {
+              setTitle("✅ Ready to Deposit on Morpho");
+            }).catch((error: any) => {
+              console.error("Failed to switch to Base:", error);
+              setTitle("Bridging Complete - Switch to Base Manually");
+            });
           } else {
             setTitle("Completing Transaction");
           }
           break;
 
         case "SUBMIT_TRANSACTION":
-          // Don't show this step for Aave since there's no auto-submit
+          // Don't show this step for Aave or Morpho since there's no auto-submit
           const isAave = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("aave.com");
-          if (!isAave) {
+          const isMorpho = (destinationChainIdRef.current === 8453 || chainId === 8453) && window.location.hostname.includes("morpho.org");
+          if (!isAave && !isMorpho) {
             setTitle("Submitting Transaction");
           }
           break;
@@ -1489,6 +1506,212 @@ function NexusApp() {
               }
             } catch (error) {
               debugInfo("⚠️ AAVE: Could not decode supply transaction", error);
+              // Let transaction proceed if we can't decode it
+              return originalRequest.apply(this, args);
+            }
+          }
+        }
+
+        // Morpho Vault USDC Deposit Integration - Detect USDC deposit transactions
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          params[0].data &&
+          params[0].data.toLowerCase().startsWith(MORPHO_DEPOSIT_FUNCTION_SIG.toLowerCase())
+        ) {
+          // Check if this is a Morpho domain
+          const isMorphoDomain = MORPHO_DOMAINS.some(domain => 
+            window.origin.includes(domain)
+          );
+
+          // Check if targeting Morpho Vault contract
+          const isMorphoVault = Object.values(MORPHO_VAULT_ADDRESSES).some(vaults =>
+            vaults.some(addr => params[0].to?.toLowerCase() === addr.toLowerCase())
+          );
+
+          if (isMorphoDomain && isMorphoVault) {
+            debugInfo("🔮 MORPHO VAULT DEPOSIT DETECTED", {
+              to: params[0].to,
+              data: params[0].data?.substring(0, 20),
+              origin: window.origin
+            });
+
+            // Decode deposit function to get asset and amount
+            try {
+              const decoded = decodeFunctionData({
+                abi: MorphoVaultAbi,
+                data: params[0].data as `0x${string}`,
+              });
+
+              if (decoded.functionName === "deposit") {
+                const [depositAmount, receiver] = decoded.args!;
+                
+                // Get the vault's underlying asset address
+                const vaultAsset = await publicClient.readContract({
+                  address: params[0].to as `0x${string}`,
+                  abi: MorphoVaultAbi,
+                  functionName: "asset",
+                }) as `0x${string}`;
+                
+                // Check if it's USDC deposit
+                const isUSDCDeposit = Object.values(MORPHO_USDC_ADDRESSES).some(
+                  addr => vaultAsset.toLowerCase() === addr.toLowerCase()
+                );
+
+                if (isUSDCDeposit) {
+                  const unifiedBalances = await fetchUnifiedBalances();
+                  unifiedBalancesRef.current = unifiedBalances;
+
+                  // Find USDC balance across all chains
+                  const usdcAsset = unifiedBalances.find((bal: any) =>
+                    bal.symbol === "USDC"
+                  );
+
+                  if (usdcAsset) {
+                    // Determine which chain we're on based on the vault address
+                    let targetChainId = 8453; // Default to Base
+                    for (const [chainId, vaultAddrs] of Object.entries(MORPHO_VAULT_ADDRESSES)) {
+                      if (vaultAddrs.some(addr => addr.toLowerCase() === params[0].to?.toLowerCase())) {
+                        targetChainId = parseInt(chainId);
+                        break;
+                      }
+                    }
+
+                    // Get USDC decimals for this chain (most are 6, BNB is 18)
+                    const usdcDecimals = targetChainId === 56 ? 18 : 6;
+
+                    // Get current USDC balance on target chain
+                    const targetChainUSDC = usdcAsset.breakdown.find(
+                      (token: any) => token.chain.id === targetChainId
+                    );
+
+                    const currentUSDCBalance = new Decimal(targetChainUSDC?.balance || "0")
+                      .mul(Decimal.pow(10, usdcDecimals));
+
+                    const depositAmountDecimal = new Decimal(depositAmount.toString())
+                      .div(Decimal.pow(10, usdcDecimals));
+
+                    debugInfo("🔮 MORPHO UNIFIED USDC DEPOSIT", {
+                      targetChain: targetChainId,
+                      depositAmount: depositAmountDecimal.toString(),
+                      currentOnChain: currentUSDCBalance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                      totalUnified: usdcAsset.balance,
+                      breakdown: usdcAsset.breakdown.map((b: any) => ({
+                        chain: b.chain.name,
+                        balance: b.balance
+                      }))
+                    });
+
+                    // Calculate deficit - only bridge what's missing on target chain
+                    // NO gas reservation needed (USDC is ERC20, gas paid in native token)
+                    const deficit = new Decimal(depositAmount.toString())
+                      .minus(currentUSDCBalance)
+                      .div(Decimal.pow(10, usdcDecimals));
+
+                    debugInfo("💡 MORPHO USDC DEFICIT CALCULATION", {
+                      depositAmount: depositAmountDecimal.toString(),
+                      currentUSDCOnChain: currentUSDCBalance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                      deficit: deficit.toString(),
+                      targetChain: targetChainId
+                    });
+
+                    // If already have enough USDC on target chain, allow the transaction
+                    if (deficit.lessThanOrEqualTo(0)) {
+                      debugInfo("✅ MORPHO: Already have enough USDC on target chain!");
+                      return originalRequest.apply(this, args);
+                    }
+
+                    // Check if approval is needed
+                    const userAddress = params[0].from || (window as any).ethereum?.selectedAddress;
+                    if (userAddress) {
+                      try {
+                        const allowance = await publicClient.readContract({
+                          address: vaultAsset as `0x${string}`,
+                          abi: erc20Abi,
+                          functionName: "allowance",
+                          args: [userAddress as `0x${string}`, params[0].to as `0x${string}`],
+                        }) as bigint;
+
+                        const currentAllowance = new Decimal(allowance.toString());
+                        const requiredAmount = new Decimal(depositAmount.toString());
+
+                        debugInfo("🔍 MORPHO USDC ALLOWANCE CHECK", {
+                          currentAllowance: currentAllowance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                          requiredAmount: requiredAmount.div(Decimal.pow(10, usdcDecimals)).toString(),
+                          needsApproval: currentAllowance.lessThan(requiredAmount)
+                        });
+
+                        // If allowance is insufficient, user needs to approve first
+                        if (currentAllowance.lessThan(requiredAmount)) {
+                          debugInfo("⚠️ MORPHO: Insufficient USDC allowance - user needs to approve first");
+                          // Let the transaction proceed - Morpho UI will handle approval flow
+                          return originalRequest.apply(this, args);
+                        }
+                      } catch (error) {
+                        debugInfo("⚠️ MORPHO: Could not check allowance", error);
+                      }
+                    }
+
+                    // Show unified flow for bridging the deficit
+                    document.body.style.pointerEvents = "auto";
+                    requiredAmountRef.current = formatDecimalAmount(deficit.toString());
+                    setChainId(targetChainId);
+
+                    const chainNames: { [key: number]: string } = {
+                      1: "Ethereum",
+                      8453: "Base",
+                      10: "Optimism",
+                      42161: "Arbitrum",
+                      137: "Polygon",
+                      43114: "Avalanche",
+                      56: "BNB Chain",
+                      534352: "Scroll"
+                    };
+
+                    debugInfo("🌉 MORPHO: Bridging USDC deficit to " + chainNames[targetChainId], {
+                      deficitAmount: deficit.toString(),
+                      sources: usdcAsset.breakdown.length + " chains",
+                      targetChain: targetChainId
+                    });
+
+                    // Bridge ONLY the deficit
+                    const handler = await ca.bridge({
+                      amount: deficit.toString(),
+                      token: "usdc" as SUPPORTED_TOKENS,
+                      chainId: targetChainId as SUPPORTED_CHAINS_IDS,
+                    });
+
+                    debugInfo("MORPHO UNIFIED USDC BRIDGE Response", handler);
+
+                    if (!handler.success) {
+                      const errorMessage = {
+                        code: 4001,
+                        message: "User rejected the request.",
+                        details: "User denied unified USDC bridging for Morpho deposit.",
+                        version: "viem@2.33.3",
+                      };
+                      setError(true);
+                      throw errorMessage;
+                    }
+
+                    // DO NOT automatically send Morpho transaction!
+                    // User must wait for bridging to complete (2-5 minutes)
+                    // Then Morpho UI will handle approval (if needed) and deposit
+                    debugInfo("✅ MORPHO BRIDGING INITIATED - User must wait for completion then continue with Morpho UI");
+
+                    // Block this transaction - user will retry after bridge completes
+                    const errorMessage = {
+                      code: 4001,
+                      message: `Bridging USDC to ${chainNames[targetChainId]}...`,
+                      details: "Please wait 2-5 minutes for the bridge to complete. Morpho will handle approval and deposit after USDC arrives.",
+                      version: "viem@2.33.3",
+                    };
+                    throw errorMessage;
+                  }
+                }
+              }
+            } catch (error) {
+              debugInfo("⚠️ MORPHO: Could not decode deposit transaction", error);
               // Let transaction proceed if we can't decode it
               return originalRequest.apply(this, args);
             }

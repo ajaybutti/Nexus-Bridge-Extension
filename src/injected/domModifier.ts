@@ -1929,10 +1929,422 @@ function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[])
   }, 100);
 }
 
+// Morpho Integration - Add floating unified USDC button
+async function initializeMorphoIntegration() {
+  // Check if we're on Morpho domain
+  const isMorphoDomain = window.location.hostname.includes("app.morpho.org") || 
+                        window.location.hostname === "morpho.org";
+  
+  if (!isMorphoDomain) {
+    console.log("🔮 NEXUS: Not on Morpho domain, skipping Morpho integration");
+    return;
+  }
+
+  // Guard to prevent multiple initializations
+  if ((window as any).__nexusMorphoInitialized) {
+    return;
+  }
+  (window as any).__nexusMorphoInitialized = true;
+
+  console.log("🔮 NEXUS: Morpho integration active on", window.location.href, "- adding unified USDC button");
+
+  // Wait for page to load
+  setTimeout(async () => {
+    // Create floating unified USDC button
+    const unifiedButton = document.createElement('button');
+    unifiedButton.id = 'nexus-morpho-unified-button';
+    unifiedButton.innerHTML = '🔮 Unified USDC';
+    unifiedButton.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999999;
+      padding: 12px 20px;
+      background: linear-gradient(45deg, #8B5CF6, #A855F7);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+      transition: all 0.3s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+    
+    // Hover effects
+    unifiedButton.addEventListener('mouseenter', () => {
+      unifiedButton.style.transform = 'scale(1.05)';
+      unifiedButton.style.boxShadow = '0 6px 25px rgba(139, 92, 246, 0.4)';
+    });
+    
+    unifiedButton.addEventListener('mouseleave', () => {
+      unifiedButton.style.transform = 'scale(1)';
+      unifiedButton.style.boxShadow = '0 4px 20px rgba(139, 92, 246, 0.3)';
+    });
+    
+    // Click handler
+    unifiedButton.addEventListener('click', async () => {
+      console.log("🔮 NEXUS: Unified USDC button clicked!");
+      
+      // Fetch unified balances
+      const unifiedBalances = await fetchUnifiedBalances();
+      const usdcAsset = unifiedBalances.find((bal: any) => bal.symbol === "USDC");
+      
+      if (!usdcAsset) {
+        alert("No USDC found in your unified balances");
+        return;
+      }
+      
+      const totalUsdcBalance = parseFloat(usdcAsset.balance || "0");
+      const usdcChains = usdcAsset.breakdown.filter((token: any) => Number(token.balance) > 0);
+      
+      if (totalUsdcBalance > 0) {
+        console.log(`🔮 NEXUS: Opening unified USDC popup with $${totalUsdcBalance} across ${usdcChains.length} chains`);
+        openUnifiedUsdcDepositModal(totalUsdcBalance, usdcChains);
+      } else {
+        alert("No USDC available in your unified balances");
+      }
+    });
+    
+    // Add button to page
+    document.body.appendChild(unifiedButton);
+    console.log("🔮 NEXUS: Added unified USDC button to Morpho page");
+    
+  }, 2000); // Wait 2 seconds for page to fully load
+}
+
+// Function to open unified USDC deposit modal for Morpho
+function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]) {
+  console.log("🔮 NEXUS: Opening unified USDC deposit modal for Morpho");
+  
+  // Remove existing modal if present
+  const existingModal = document.querySelector('.nexus-morpho-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.className = 'nexus-morpho-modal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    backdrop-filter: blur(5px);
+    pointer-events: none;
+  `;
+  
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: linear-gradient(135deg, #2D1B69 0%, #8B5CF6 100%);
+    border-radius: 16px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1000000;
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">🔮 Unified USDC on Base</h2>
+      <p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 14px;">Bridge and deposit USDC to Morpho Vault on Base chain</p>
+    </div>
+    
+    <div style="background: rgba(139,92,246,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid rgba(139,92,246,0.2);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 600; color: #fff;">Available USDC Balance</span>
+        <span style="font-weight: bold; color: #8B5CF6; font-size: 18px;">$${totalUsdcBalance.toFixed(2)} USDC</span>
+      </div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.8);">
+        ${usdcChains.map((chain: any) => `
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>${removeMainnet(chain.chain.name)}</span>
+            <span style="color: #8B5CF6;">$${parseFloat(chain.balance).toFixed(2)} USDC</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: #fff;">
+        USDC Amount for Base Chain
+      </label>
+      <div style="position: relative; display: flex; align-items: center; gap: 8px;">
+        <button id="nexus-morpho-usdc-decrement" style="
+          padding: 12px 16px;
+          background: rgba(239,68,68,0.2);
+          border: 1px solid #ef4444;
+          border-radius: 8px;
+          color: #ef4444;
+          font-size: 20px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        " onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">
+          −
+        </button>
+        <div style="position: relative; flex: 1;">
+          <input 
+            type="text" 
+            inputmode="decimal" 
+            id="nexus-morpho-usdc-amount" 
+            placeholder="0.00"
+            autocomplete="off"
+            spellcheck="false"
+            style="
+              width: 100%;
+              padding: 16px 70px 16px 16px;
+              background: rgba(255,255,255,0.1);
+              border: 2px solid rgba(139,92,246,0.3);
+              border-radius: 12px;
+              color: white;
+              font-size: 18px;
+              font-weight: 600;
+              outline: none;
+              transition: all 0.3s ease;
+              box-sizing: border-box;
+            ">
+          <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600; pointer-events: none;">USDC</span>
+        </div>
+        <button id="nexus-morpho-usdc-increment" style="
+          padding: 12px 16px;
+          background: rgba(139,92,246,0.2);
+          border: 1px solid #8B5CF6;
+          border-radius: 8px;
+          color: #8B5CF6;
+          font-size: 20px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        " onmouseover="this.style.background='rgba(139,92,246,0.3)'" onmouseout="this.style.background='rgba(139,92,246,0.2)'">
+          +
+        </button>
+      </div>
+      <button id="nexus-morpho-usdc-max-btn" style="
+        margin-top: 8px;
+        padding: 6px 12px;
+        background: rgba(139,92,246,0.2);
+        border: 1px solid #8B5CF6;
+        border-radius: 6px;
+        color: #8B5CF6;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.background='rgba(139,92,246,0.3)'" onmouseout="this.style.background='rgba(139,92,246,0.2)'">
+        MAX: $${totalUsdcBalance.toFixed(2)} USDC
+      </button>
+    </div>
+    
+    <div style="display: flex; gap: 12px;">
+      <button id="nexus-morpho-usdc-cancel-btn" style="
+        flex: 1;
+        padding: 14px;
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: 10px;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+        Cancel
+      </button>
+      <button id="nexus-morpho-usdc-confirm-btn" style="
+        flex: 2;
+        padding: 14px;
+        background: linear-gradient(45deg, #8B5CF6, #A855F7);
+        border: none;
+        border-radius: 10px;
+        color: #000;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        🔮 Bridge to Base
+      </button>
+    </div>
+    
+    <div style="margin-top: 16px; padding: 12px; background: rgba(139,92,246,0.1); border-radius: 8px; font-size: 12px; text-align: center; color: rgba(255,255,255,0.8);">
+      💡 Nexus will bridge USDC to Base chain automatically
+    </div>
+  `;
+  
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+  
+  // Add event listeners
+  const usdcAmountInput = modalOverlay.querySelector('#nexus-morpho-usdc-amount') as HTMLInputElement;
+  const incrementBtn = modalOverlay.querySelector('#nexus-morpho-usdc-increment') as HTMLButtonElement;
+  const decrementBtn = modalOverlay.querySelector('#nexus-morpho-usdc-decrement') as HTMLButtonElement;
+  const maxBtn = modalOverlay.querySelector('#nexus-morpho-usdc-max-btn') as HTMLButtonElement;
+  const cancelBtn = modalOverlay.querySelector('#nexus-morpho-usdc-cancel-btn') as HTMLButtonElement;
+  const confirmBtn = modalOverlay.querySelector('#nexus-morpho-usdc-confirm-btn') as HTMLButtonElement;
+  
+  // Focus on input
+  setTimeout(() => {
+    usdcAmountInput.focus();
+    console.log("🎯 NEXUS: Focused on Morpho USDC input");
+  }, 100);
+  
+  // Input validation - only allow numbers and decimal point
+  usdcAmountInput.addEventListener('input', (e) => {
+    let value = usdcAmountInput.value.replace(/[^0-9.]/g, '');
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+    usdcAmountInput.value = value;
+  });
+  
+  // Increment button - add 0.2 USDC
+  incrementBtn.addEventListener('click', () => {
+    const currentValue = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.min(currentValue + 0.2, totalUsdcBalance);
+    usdcAmountInput.value = newValue.toFixed(2);
+    console.log("➕ NEXUS: Incremented to", newValue);
+  });
+  
+  // Decrement button - subtract 0.2 USDC
+  decrementBtn.addEventListener('click', () => {
+    const currentValue = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.max(currentValue - 0.2, 0);
+    usdcAmountInput.value = newValue.toFixed(2);
+    console.log("➖ NEXUS: Decremented to", newValue);
+  });
+  
+  // Max button functionality
+  maxBtn.addEventListener('click', () => {
+    usdcAmountInput.value = totalUsdcBalance.toFixed(2);
+  });
+  
+  // Cancel button
+  cancelBtn.addEventListener('click', () => {
+    modalOverlay.remove();
+  });
+  
+  // Close on overlay background click
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      modalOverlay.remove();
+    }
+  });
+  
+  // Confirm button - Calculate deficit and trigger bridging to Base
+  confirmBtn.addEventListener('click', async () => {
+    const depositAmount = parseFloat(usdcAmountInput.value || '0');
+    
+    if (!depositAmount || depositAmount <= 0) {
+      alert('Please enter a valid USDC amount');
+      return;
+    }
+    
+    if (depositAmount > totalUsdcBalance) {
+      alert(`Amount exceeds available balance of $${totalUsdcBalance.toFixed(2)} USDC`);
+      return;
+    }
+    
+    console.log(`🔮 NEXUS: User wants to bridge ${depositAmount} USDC to Base for Morpho deposit`);
+    
+    // Disable button to prevent double-clicks
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '⏳ Initiating bridging...';
+    confirmBtn.style.opacity = '0.6';
+    
+    try {
+      // Calculate how much we're short on Base chain (chainId: 8453)
+      const baseBalance = usdcChains.find((chain: any) => chain.chain.id === 8453);
+      const currentBaseUsdc = parseFloat(baseBalance?.balance || '0');
+      
+      // NO gas reservation for USDC (gas paid in native ETH)
+      const deficit = depositAmount - currentBaseUsdc;
+      
+      console.log(`💡 NEXUS: Base has ${currentBaseUsdc} USDC, need ${depositAmount} USDC, deficit: ${deficit} USDC`);
+      
+      if (deficit <= 0) {
+        // No bridging needed - user has enough on Base
+        alert(`✅ You already have enough USDC on Base chain!\n\nYou can use Morpho directly with your ${currentBaseUsdc.toFixed(2)} USDC on Base.\n\nMake sure you have native ETH on Base for gas fees.`);
+        modalOverlay.remove();
+        return;
+      }
+      
+      // Access the Nexus SDK that was initialized in nexusCA.tsx
+      if (!(window as any).nexus) {
+        throw new Error('Nexus SDK not initialized');
+      }
+      
+      console.log(`💫 NEXUS: Calling ca.bridge() to bridge ${deficit.toFixed(2)} USDC deficit to Base (chainId: 8453)`);
+      
+      // Set destination chainId for progress tracking
+      if ((window as any).nexusDestinationChainId) {
+        (window as any).nexusDestinationChainId.current = 8453;
+        console.log("🎯 NEXUS: Set destination chainId to 8453 (Base)");
+      }
+      
+      // Bridge ONLY the deficit amount from other chains to Base
+      const bridgeResult = await (window as any).nexus.bridge({
+        amount: deficit.toString(),
+        token: 'usdc',
+        chainId: 8453, // Base chain
+      });
+      
+      console.log(`✅ NEXUS: Bridge result:`, bridgeResult);
+      
+      if (bridgeResult.success) {
+        // Success! Show completion message
+        alert(`✅ Successfully bridged ${deficit.toFixed(2)} USDC to Base chain!\n\n🔮 Total USDC now available on Base: ${(currentBaseUsdc + deficit).toFixed(2)} USDC\n\nYou can now use Morpho on Base chain!\n\nMake sure you have native ETH on Base for gas fees.`);
+        modalOverlay.remove();
+      } else {
+        // User rejected or bridging failed
+        console.log('❌ NEXUS: Bridging was rejected or failed');
+        alert('Bridging was cancelled or failed. Please try again.');
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '🔮 Bridge to Base';
+        confirmBtn.style.opacity = '1';
+      }
+      
+    } catch (error: any) {
+      console.error('❌ NEXUS: Error during unified USDC bridging:', error);
+      alert(`Failed to initiate bridging: ${error?.message || error}`);
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '🔮 Bridge to Base';
+      confirmBtn.style.opacity = '1';
+    }
+  });
+  
+  // Focus on input
+  setTimeout(() => {
+    usdcAmountInput.focus();
+  }, 100);
+}
+
 // Initialize integrations
 injectDomModifier();
 
 // Initialize Aave integration after a short delay to ensure DOM is ready
 setTimeout(() => {
   initializeAaveIntegration();
+}, 1000); // Wait 1 second for page to load
+
+// Initialize Morpho integration after a short delay to ensure DOM is ready
+setTimeout(() => {
+  initializeMorphoIntegration();
 }, 1000); // Wait 1 second for page to load

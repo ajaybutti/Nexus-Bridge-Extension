@@ -33,7 +33,8 @@
         "https://stake.lido.fi/*",
         "https://lido.fi/*",
         "https://app.aave.com/*",
-        "https://aave.com/*"
+        "https://aave.com/*",
+        "https://app.morpho.org/*"
       ],
       "run_at": "document_start"
     }
@@ -60,7 +61,8 @@
         "https://stake.lido.fi/*",
         "https://lido.fi/*",
         "https://app.aave.com/*",
-        "https://aave.com/*"
+        "https://aave.com/*",
+        "https://app.morpho.org/*"
       ]
     }
   ],
