@@ -23,6 +23,7 @@ import {
 } from "./domDiv";
 import { removeMainnet } from "../utils/multicall";
 import { getChainName } from "../utils/lib";
+import { extractVaultAddressFromUrl, approveAndDepositToVault } from "../utils/morpho-vault";
 
 let prevAssetSymbols: string[] = [];
 
@@ -2183,6 +2184,23 @@ function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]
       </button>
     </div>
     
+    <div id="nexus-morpho-quick-deposit" style="display: none; margin-top: 12px;">
+      <button id="nexus-morpho-quick-deposit-btn" style="
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(45deg, #10B981, #059669);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        ⚡ Quick Deposit to Vault
+      </button>
+    </div>
+    
     <div style="margin-top: 16px; padding: 12px; background: rgba(139,92,246,0.1); border-radius: 8px; font-size: 12px; text-align: center; color: rgba(255,255,255,0.8);">
       💡 Nexus will bridge USDC to Base chain automatically
     </div>
@@ -2198,6 +2216,19 @@ function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]
   const maxBtn = modalOverlay.querySelector('#nexus-morpho-usdc-max-btn') as HTMLButtonElement;
   const cancelBtn = modalOverlay.querySelector('#nexus-morpho-usdc-cancel-btn') as HTMLButtonElement;
   const confirmBtn = modalOverlay.querySelector('#nexus-morpho-usdc-confirm-btn') as HTMLButtonElement;
+  const quickDepositDiv = modalOverlay.querySelector('#nexus-morpho-quick-deposit') as HTMLDivElement;
+  const quickDepositBtn = modalOverlay.querySelector('#nexus-morpho-quick-deposit-btn') as HTMLButtonElement;
+  
+  // Check if we can show quick deposit option
+  const vaultAddress = extractVaultAddressFromUrl(window.location.href);
+  const baseBalance = usdcChains.find((chain: any) => chain.chain.id === 8453);
+  const currentBaseUsdc = parseFloat(baseBalance?.balance || '0');
+  
+  // Show quick deposit button if user has USDC on Base and we can extract vault address
+  if (vaultAddress && currentBaseUsdc > 0) {
+    quickDepositDiv.style.display = 'block';
+    console.log(`🔮 NEXUS: Quick deposit available for vault ${vaultAddress} with ${currentBaseUsdc} USDC on Base`);
+  }
   
   // Focus on input
   setTimeout(() => {
@@ -2281,7 +2312,57 @@ function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]
       
       if (deficit <= 0) {
         // No bridging needed - user has enough on Base
-        alert(`✅ You already have enough USDC on Base chain!\n\nYou can use Morpho directly with your ${currentBaseUsdc.toFixed(2)} USDC on Base.\n\nMake sure you have native ETH on Base for gas fees.`);
+        const vaultAddress = extractVaultAddressFromUrl(window.location.href);
+        
+        if (vaultAddress) {
+          const shouldDeposit = confirm(`✅ You already have enough USDC on Base chain!\n\nYou have ${currentBaseUsdc.toFixed(2)} USDC on Base.\n\nWould you like to automatically deposit ${depositAmount.toFixed(2)} USDC to the Morpho vault?\n\nClick OK to approve + deposit automatically, or Cancel to do it manually.`);
+          
+          if (shouldDeposit) {
+            console.log(`🔮 NEXUS: User chose automatic deposit to vault ${vaultAddress}`);
+            
+            // Show loading state
+            const loadingAlert = document.createElement('div');
+            loadingAlert.style.cssText = `
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background: linear-gradient(135deg, #2D1B69 0%, #8B5CF6 100%);
+              color: white;
+              padding: 20px;
+              border-radius: 12px;
+              box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+              z-index: 1000000;
+              text-align: center;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            `;
+            loadingAlert.innerHTML = `
+              <div style="font-size: 18px; margin-bottom: 10px;">🔮 Depositing to Morpho Vault...</div>
+              <div style="font-size: 14px; opacity: 0.8;">Approving USDC and depositing ${depositAmount.toFixed(2)} USDC</div>
+            `;
+            document.body.appendChild(loadingAlert);
+            
+            try {
+              const result = await approveAndDepositToVault(vaultAddress, depositAmount.toString());
+              loadingAlert.remove();
+              
+              if (result.success) {
+                alert(`🎉 Success!\n\n✅ Approved USDC for vault\n✅ Deposited ${depositAmount.toFixed(2)} USDC to Morpho vault\n\nTransaction hash: ${result.txHash}\n\nYour USDC is now earning yield in the Morpho vault!`);
+              } else {
+                alert(`⚠️ Deposit failed:\n\n${result.error}\n\nYou can manually deposit your USDC on Morpho.`);
+              }
+            } catch (error: any) {
+              loadingAlert.remove();
+              console.error('❌ NEXUS: Error during automatic deposit:', error);
+              alert(`⚠️ Automatic deposit failed:\n\n${error.message || error}\n\nYou can manually deposit your USDC on Morpho.`);
+            }
+          } else {
+            alert(`✅ You already have enough USDC on Base chain!\n\nYou have ${currentBaseUsdc.toFixed(2)} USDC on Base.\n\nYou can manually deposit to the Morpho vault!`);
+          }
+        } else {
+          alert(`✅ You already have enough USDC on Base chain!\n\nYou have ${currentBaseUsdc.toFixed(2)} USDC on Base.\n\nMake sure you have native ETH on Base for gas fees.`);
+        }
+        
         modalOverlay.remove();
         return;
       }
@@ -2309,15 +2390,136 @@ function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]
       console.log(`✅ NEXUS: Bridge result:`, bridgeResult);
       
       if (bridgeResult.success) {
-        // Success! Show completion message
-        alert(`✅ Successfully bridged ${deficit.toFixed(2)} USDC to Base chain!\n\n🔮 Total USDC now available on Base: ${(currentBaseUsdc + deficit).toFixed(2)} USDC\n\nYou can now use Morpho on Base chain!\n\nMake sure you have native ETH on Base for gas fees.`);
-        modalOverlay.remove();
+        // Extract vault address from current URL
+        const vaultAddress = extractVaultAddressFromUrl(window.location.href);
+        
+        modalOverlay.remove(); // Close the original modal first
+        
+        if (vaultAddress) {
+          // Show custom deposit confirmation modal
+          const depositModal = document.createElement('div');
+          depositModal.className = 'nexus-morpho-deposit-modal';
+          depositModal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999999;
+            backdrop-filter: blur(5px);
+          `;
+          
+          const depositContent = document.createElement('div');
+          depositContent.style.cssText = `
+            background: linear-gradient(135deg, #2D1B69 0%, #8B5CF6 100%);
+            border-radius: 16px;
+            padding: 24px;
+            width: 400px;
+            max-width: 90vw;
+            box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+          `;
+          
+          depositContent.innerHTML = `
+            <div style="margin-bottom: 24px;">
+              <div style="font-size: 48px; margin-bottom: 16px;">🎉</div>
+              <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">Bridge Successful!</h2>
+              <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 14px;">Successfully bridged ${deficit.toFixed(2)} USDC to Base chain</p>
+            </div>
+            
+            <div style="background: rgba(139,92,246,0.1); border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid rgba(139,92,246,0.2);">
+              <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">� Total USDC on Base</div>
+              <div style="font-size: 24px; font-weight: bold; color: #8B5CF6;">${(currentBaseUsdc + deficit).toFixed(2)} USDC</div>
+            </div>
+            
+            <div style="margin-bottom: 24px;">
+              <p style="font-size: 16px; margin: 0 0 16px 0;">Would you like to deposit <strong>${depositAmount.toFixed(2)} USDC</strong> to the Morpho vault automatically?</p>
+              <p style="font-size: 12px; color: rgba(255,255,255,0.7); margin: 0;">This will approve USDC and deposit to the vault in one transaction</p>
+            </div>
+            
+            <div style="display: flex; gap: 12px;">
+              <button id="morpho-deposit-manual" style="
+                flex: 1;
+                padding: 14px;
+                background: rgba(255,255,255,0.1);
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 10px;
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+              ">
+                Do Manually
+              </button>
+              <button id="morpho-deposit-auto" style="
+                flex: 2;
+                padding: 14px;
+                background: linear-gradient(45deg, #10B981, #059669);
+                border: none;
+                border-radius: 10px;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: all 0.3s ease;
+              ">
+                🔮 Auto Deposit
+              </button>
+            </div>
+          `;
+          
+          depositModal.appendChild(depositContent);
+          document.body.appendChild(depositModal);
+          
+          // Manual button
+          depositContent.querySelector('#morpho-deposit-manual')?.addEventListener('click', () => {
+            depositModal.remove();
+            alert(`✅ Bridge complete!\n\nYou now have ${(currentBaseUsdc + deficit).toFixed(2)} USDC on Base.\n\nYou can manually deposit to the Morpho vault using the regular interface.`);
+          });
+          
+          // Auto deposit button
+          depositContent.querySelector('#morpho-deposit-auto')?.addEventListener('click', async () => {
+            console.log(`🔮 NEXUS: User chose automatic deposit to vault ${vaultAddress}`);
+            
+            const autoBtn = depositContent.querySelector('#morpho-deposit-auto') as HTMLButtonElement;
+            autoBtn.disabled = true;
+            autoBtn.textContent = '⏳ Depositing...';
+            
+            try {
+              const result = await approveAndDepositToVault(vaultAddress, depositAmount.toString());
+              
+              if (result.success) {
+                depositModal.remove();
+                alert(`🎉 Complete Success!\n\n✅ Bridged ${deficit.toFixed(2)} USDC to Base\n✅ Approved USDC for vault\n✅ Deposited ${depositAmount.toFixed(2)} USDC to Morpho vault\n\nTransaction: ${result.txHash}\n\nYour USDC is now earning yield!`);
+              } else {
+                autoBtn.disabled = false;
+                autoBtn.textContent = '🔮 Auto Deposit';
+                alert(`⚠️ Deposit failed:\n\n${result.error}\n\nYou can try again or deposit manually.`);
+              }
+            } catch (error: any) {
+              autoBtn.disabled = false;
+              autoBtn.textContent = '🔮 Auto Deposit';
+              alert(`⚠️ Deposit failed:\n\n${error.message || error}\n\nYou can try again or deposit manually.`);
+            }
+          });
+        } else {
+          // Fallback if we can't extract vault address
+          alert(`✅ Successfully bridged ${deficit.toFixed(2)} USDC to Base chain!\n\n🔮 Total USDC now available on Base: ${(currentBaseUsdc + deficit).toFixed(2)} USDC\n\nYou can now use Morpho on Base chain!`);
+        }
       } else {
         // User rejected or bridging failed
         console.log('❌ NEXUS: Bridging was rejected or failed');
         alert('Bridging was cancelled or failed. Please try again.');
         confirmBtn.disabled = false;
-        confirmBtn.innerHTML = '🔮 Bridge to Base';
+        confirmBtn.innerHTML = '🔮 Bridge to  Base';
         confirmBtn.style.opacity = '1';
       }
       
@@ -2327,6 +2529,50 @@ function openUnifiedUsdcDepositModal(totalUsdcBalance: number, usdcChains: any[]
       confirmBtn.disabled = false;
       confirmBtn.innerHTML = '🔮 Bridge to Base';
       confirmBtn.style.opacity = '1';
+    }
+  });
+  
+  // Quick deposit button - for users who already have USDC on Base
+  quickDepositBtn.addEventListener('click', async () => {
+    const depositAmount = parseFloat(usdcAmountInput.value || '0');
+    
+    if (!depositAmount || depositAmount <= 0) {
+      alert('Please enter a valid USDC amount');
+      return;
+    }
+    
+    if (depositAmount > currentBaseUsdc) {
+      alert(`Amount exceeds your Base balance of ${currentBaseUsdc.toFixed(2)} USDC`);
+      return;
+    }
+    
+    if (!vaultAddress) {
+      alert('Could not extract vault address from URL');
+      return;
+    }
+    
+    console.log(`🔮 NEXUS: Quick deposit ${depositAmount} USDC to vault ${vaultAddress}`);
+    
+    // Show loading state
+    quickDepositBtn.disabled = true;
+    quickDepositBtn.textContent = '⏳ Depositing...';
+    
+    try {
+      const result = await approveAndDepositToVault(vaultAddress, depositAmount.toString());
+      
+      if (result.success) {
+        alert(`🎉 Success!\n\n✅ Approved USDC for vault\n✅ Deposited ${depositAmount.toFixed(2)} USDC to Morpho vault\n\nTransaction hash: ${result.txHash}\n\nYour USDC is now earning yield!`);
+        modalOverlay.remove();
+      } else {
+        alert(`⚠️ Deposit failed:\n\n${result.error}`);
+        quickDepositBtn.disabled = false;
+        quickDepositBtn.innerHTML = '⚡ Quick Deposit to Vault';
+      }
+    } catch (error: any) {
+      console.error('❌ NEXUS: Error during quick deposit:', error);
+      alert(`⚠️ Quick deposit failed:\n\n${error.message || error}`);
+      quickDepositBtn.disabled = false;
+      quickDepositBtn.innerHTML = '⚡ Quick Deposit to Vault';
     }
   });
   
