@@ -25,6 +25,7 @@ import { removeMainnet } from "../utils/multicall";
 import { getChainName } from "../utils/lib";
 import { extractVaultAddressFromUrl, approveAndDepositToVault } from "../utils/morpho-vault";
 import { stakeEthWithLido, getStEthBalance } from "../utils/lido-stake";
+import { supplyToAave } from "../utils/aave-supply";
 
 let prevAssetSymbols: string[] = [];
 
@@ -359,7 +360,7 @@ function openLidoUnifiedEthModal(ethAsset: any) {
                   cursor: pointer;
                   transition: all 0.3s ease;
                 ">
-                  🚀 Awesome! Close
+                  🚀   Close
                 </button>
               `;
               
@@ -746,7 +747,160 @@ async function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: 
       
       if (bridgeResult.success) {
         modalOverlay.remove();
-        alert(`🎉 Bridge Successful!\n\n✅ Bridged $${supplyAmount} USDC to ${targetChainName}\n\nYou can now supply to Aave manually on ${targetChainName}.`);
+        
+        // Show auto-supply loading modal
+        const loadingModal = document.createElement('div');
+        loadingModal.className = 'nexus-aave-loading-modal';
+        loadingModal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 999999;
+          backdrop-filter: blur(5px);
+        `;
+        
+        const loadingContent = document.createElement('div');
+        loadingContent.style.cssText = `
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          border-radius: 16px;
+          padding: 32px;
+          width: 400px;
+          max-width: 90vw;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: white;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          text-align: center;
+        `;
+        
+        loadingContent.innerHTML = `
+          <div style="margin-bottom: 24px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">�</div>
+            <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">Auto Supplying...</h2>
+            <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 14px;">Bridged $${supplyAmount} USDC → Now supplying to Aave</p>
+          </div>
+          
+          <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">💰 Supply Amount</div>
+            <div style="font-size: 20px; font-weight: bold; color: #00ff88;">$${supplyAmount.toFixed(2)} USDC</div>
+          </div>
+          
+          <div style="display: flex; align-items: center; justify-content: center; gap: 12px; color: rgba(255,255,255,0.8);">
+            <div style="width: 20px; height: 20px; border: 2px solid #00ff88; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <span>Supplying USDC to Aave...</span>
+          </div>
+          
+          <style>
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          </style>
+        `;
+        
+        loadingModal.appendChild(loadingContent);
+        document.body.appendChild(loadingModal);
+        
+        // Wait for bridge to settle, then auto-supply to Aave
+        setTimeout(async () => {
+          try {
+            console.log(`🏦 NEXUS: Auto-supplying $${supplyAmount} USDC to Aave after successful bridge`);
+            const result = await supplyToAave(supplyAmount.toString());
+            loadingModal.remove();
+            
+            if (result.success) {
+              // Show final success modal
+              const successModal = document.createElement('div');
+              successModal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 999999;
+                backdrop-filter: blur(5px);
+              `;
+              
+              const successContent = document.createElement('div');
+              successContent.style.cssText = `
+                background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+                border-radius: 16px;
+                padding: 32px;
+                width: 400px;
+                max-width: 90vw;
+                box-shadow: 0 20px 60px rgba(16, 185, 129, 0.3);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                text-align: center;
+              `;
+              
+              successContent.innerHTML = `
+                <div style="margin-bottom: 24px;">
+                  <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+                  <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 28px; font-weight: 600;">Supply Complete!</h2>
+                  <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 16px;">Fully automated bridge + Aave supply completed</p>
+                </div>
+                
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span>✅ Bridged to ${targetChainName}:</span>
+                    <span style="font-weight: bold;">$${supplyAmount.toFixed(2)} USDC</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span>✅ Supplied to Aave:</span>
+                    <span style="font-weight: bold;">$${supplyAmount.toFixed(2)} USDC</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span>✅ Received aUSDC:</span>
+                    <span style="font-weight: bold;">~$${supplyAmount.toFixed(2)} aUSDC</span>
+                  </div>
+                </div>
+                
+                <div style="margin-bottom: 24px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                  <div style="font-size: 12px; opacity: 0.8; margin-bottom: 4px;">Transaction Hash:</div>
+                  <div style="font-size: 10px; font-family: monospace; word-break: break-all;">${result.txHash}</div>
+                </div>
+                
+                <button onclick="this.parentElement.parentElement.remove()" style="
+                  width: 100%;
+                  padding: 16px;
+                  background: rgba(255,255,255,0.2);
+                  border: 1px solid rgba(255,255,255,0.3);
+                  border-radius: 12px;
+                  color: white;
+                  font-size: 16px;
+                  font-weight: 600;
+                  cursor: pointer;
+                  transition: all 0.3s ease;
+                ">
+                  🚀   Close
+                </button>
+              `;
+              
+              successModal.appendChild(successContent);
+              document.body.appendChild(successModal);
+              
+            } else {
+              alert(`⚠️ Bridge succeeded but auto-supply failed:\n\n${result.error}\n\nYou can manually supply your USDC to Aave on ${targetChainName}.`);
+            }
+          } catch (error: any) {
+            loadingModal.remove();
+            console.error('🏦 NEXUS: Error during auto-supply:', error);
+            alert(`⚠️ Bridge succeeded but auto-supply failed:\n\n${error.message || error}\n\nYou can manually supply your USDC to Aave on ${targetChainName}.`);
+          }
+        }, 3000); // Wait 3 seconds for bridge to settle
+        
       } else {
         bridgeSupplyBtn.disabled = false;
         bridgeSupplyBtn.innerHTML = `🚀 Bridge + Supply to Aave<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to ${targetChainName} then supply automatically</div>`;

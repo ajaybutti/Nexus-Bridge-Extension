@@ -358,7 +358,7 @@ function openLidoUnifiedEthModal(ethAsset: any) {
                   cursor: pointer;
                   transition: all 0.3s ease;
                 ">
-                  🚀 Awesome! Close
+                  🚀   Close
                 </button>
               `;
               
