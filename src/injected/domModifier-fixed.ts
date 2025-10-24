@@ -621,17 +621,72 @@ function injectDomModifier() {
           mutation.addedNodes.length > 0 &&
           mutation.addedNodes[0] instanceof HTMLElement
         ) {
-          // Lido Integration - Just check if button exists and add if needed
+          // Lido Integration - Clean unified ETH button approach
           if (
             window.location.hostname.includes("lido.fi") || 
             window.location.hostname.includes("stake.lido")
           ) {
-            console.log("🔥 NEXUS: Detected Lido domain, checking for button...");
+            console.log("🔥 NEXUS: Detected Lido domain, initializing unified ETH integration...");
             
             // Check if unified button already exists
             if (!document.querySelector('.nexus-lido-unified-button')) {
-              console.log("🔥 NEXUS: Button not found, adding it via mutation observer...");
-              addLidoButton();
+              // Get unified balances
+              const unifiedBalances = await fetchUnifiedBalances();
+              
+              // Find ETH across all chains
+              const ethAsset = unifiedBalances.find((bal: any) => bal.symbol === "ETH");
+              
+              if (ethAsset && parseFloat(ethAsset.balance || "0") > 0) {
+                console.log("🔥 NEXUS: Creating unified ETH button for Lido");
+                
+                // Create floating unified ETH button
+                const unifiedBtn = document.createElement('button');
+                unifiedBtn.className = 'nexus-lido-unified-button';
+                unifiedBtn.innerHTML = `
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🔥</span>
+                    <span style="font-weight: bold;">Unified ETH</span>
+                  </div>
+                `;
+                
+                unifiedBtn.style.cssText = `
+                  position: fixed;
+                  top: 20px;
+                  right: 20px;
+                  z-index: 999999;
+                  padding: 12px 20px;
+                  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+                  color: white;
+                  border: none;
+                  border-radius: 12px;
+                  font-size: 14px;
+                  font-weight: 600;
+                  cursor: pointer;
+                  box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+                  transition: all 0.3s ease;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  border: 1px solid rgba(255, 255, 255, 0.2);
+                `;
+
+                // Add hover effects
+                unifiedBtn.addEventListener('mouseenter', () => {
+                  unifiedBtn.style.transform = 'translateY(-2px)';
+                  unifiedBtn.style.boxShadow = '0 12px 35px rgba(79, 70, 229, 0.4)';
+                });
+
+                unifiedBtn.addEventListener('mouseleave', () => {
+                  unifiedBtn.style.transform = 'translateY(0)';
+                  unifiedBtn.style.boxShadow = '0 8px 25px rgba(79, 70, 229, 0.3)';
+                });
+
+                // Add click handler
+                unifiedBtn.addEventListener('click', () => {
+                  openLidoUnifiedEthModal(ethAsset);
+                });
+
+                document.body.appendChild(unifiedBtn);
+                console.log("🔥 NEXUS: Unified ETH button added to Lido");
+              }
             }
           }
 
@@ -778,87 +833,6 @@ async function initializeAaveIntegration() {
 
 // Initialize integrations
 injectDomModifier();
-
-// Function to add Lido button - always creates button regardless of ETH balance
-function addLidoButton() {
-  console.log("🔥 NEXUS: Adding Lido unified ETH button...");
-  
-  // Remove existing button if present
-  const existingBtn = document.querySelector('.nexus-lido-unified-button');
-  if (existingBtn) {
-    existingBtn.remove();
-  }
-  
-  // Create the unified ETH button - always create it
-  const unifiedBtn = document.createElement('button');
-  unifiedBtn.className = 'nexus-lido-unified-button';
-  unifiedBtn.innerHTML = `🔥 Unified ETH`;
-  
-  unifiedBtn.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 999999;
-    padding: 12px 20px;
-    background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
-    transition: all 0.3s ease;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  `;
-
-  // Add hover effects
-  unifiedBtn.addEventListener('mouseenter', () => {
-    unifiedBtn.style.transform = 'translateY(-2px)';
-    unifiedBtn.style.boxShadow = '0 12px 35px rgba(79, 70, 229, 0.4)';
-  });
-
-  unifiedBtn.addEventListener('mouseleave', () => {
-    unifiedBtn.style.transform = 'translateY(0)';
-    unifiedBtn.style.boxShadow = '0 8px 25px rgba(79, 70, 229, 0.3)';
-  });
-
-  // Add click handler that opens modal with ETH data
-  unifiedBtn.addEventListener('click', async () => {
-    try {
-      console.log("🔥 NEXUS: Button clicked, fetching unified balances...");
-      const unifiedBalances = await fetchUnifiedBalances();
-      const ethAsset = unifiedBalances.find((bal: any) => bal.symbol === "ETH");
-      console.log("🔥 NEXUS: Opening modal with ETH asset:", ethAsset);
-      openLidoUnifiedEthModal(ethAsset || { symbol: "ETH", balance: "0", chains: [] });
-    } catch (error) {
-      console.error("🔥 NEXUS: Error fetching balances:", error);
-      // Open modal anyway with empty data
-      openLidoUnifiedEthModal({ symbol: "ETH", balance: "0", chains: [] });
-    }
-  });
-
-  document.body.appendChild(unifiedBtn);
-  console.log("🔥 NEXUS: Unified ETH button added to Lido successfully!");
-}
-
-// Initialize Lido integration immediately for Lido domains
-if (window.location.hostname.includes("lido.fi") || window.location.hostname.includes("stake.lido")) {
-  console.log("🔥 NEXUS: On Lido domain, initializing unified ETH integration immediately");
-  
-  // Add button immediately
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', addLidoButton);
-  } else {
-    addLidoButton();
-  }
-  
-  // Also try after delays to ensure it appears
-  setTimeout(addLidoButton, 500);
-  setTimeout(addLidoButton, 2000);
-  setTimeout(addLidoButton, 5000);
-}
 
 // Initialize Aave integration after a short delay to ensure DOM is ready
 setTimeout(() => {
