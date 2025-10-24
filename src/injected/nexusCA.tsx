@@ -19,6 +19,7 @@ import { TOKEN_MAPPING } from "../utils/constants";
 import { clearCache, fetchUnifiedBalances } from "./cache";
 import { LifiAbi } from "../utils/lifi.abi";
 import { LidoAbi, LIDO_STETH_ADDRESS, LIDO_DOMAINS } from "../utils/lido.abi";
+import { AaveV3PoolAbi, AAVE_V3_POOL_ADDRESSES, USDC_ADDRESSES, AAVE_DOMAINS, AAVE_SUPPLY_FUNCTION_SIG } from "../utils/aave.abi";
 import IntentModal from "../components/intent-modal";
 import AllowanceModal from "../components/allowance-modal";
 import { setCAEvents } from "./caEvents";
@@ -1255,6 +1256,205 @@ function NexusApp() {
                 version: "viem@2.33.3",
               };
               throw errorMessage;
+            }
+          }
+        }
+
+        // Aave V3 USDC Supply Integration - Detect USDC supply transactions
+        if (
+          method === "eth_sendTransaction" &&
+          params?.[0] &&
+          params[0].data &&
+          params[0].data.toLowerCase().startsWith(AAVE_SUPPLY_FUNCTION_SIG.toLowerCase())
+        ) {
+          // Check if this is an Aave domain
+          const isAaveDomain = AAVE_DOMAINS.some(domain => 
+            window.origin.includes(domain)
+          );
+
+          // Check if targeting Aave V3 Pool contract
+          const isAavePool = Object.values(AAVE_V3_POOL_ADDRESSES).some(
+            addr => params[0].to?.toLowerCase() === addr.toLowerCase()
+          );
+
+          if (isAaveDomain && isAavePool) {
+            debugInfo("🏦 AAVE V3 SUPPLY DETECTED", {
+              to: params[0].to,
+              data: params[0].data?.substring(0, 20),
+              origin: window.origin
+            });
+
+            // Decode supply function to get asset and amount
+            try {
+              const decoded = decodeFunctionData({
+                abi: AaveV3PoolAbi,
+                data: params[0].data as `0x${string}`,
+              });
+
+              if (decoded.functionName === "supply") {
+                const [assetAddress, supplyAmount, onBehalfOf, referralCode] = decoded.args!;
+                
+                // Check if it's USDC supply
+                const isUSDCSupply = Object.values(USDC_ADDRESSES).some(
+                  addr => assetAddress.toLowerCase() === addr.toLowerCase()
+                );
+
+                if (isUSDCSupply) {
+                  const unifiedBalances = await fetchUnifiedBalances();
+                  unifiedBalancesRef.current = unifiedBalances;
+
+                  // Find USDC balance across all chains
+                  const usdcAsset = unifiedBalances.find((bal: any) =>
+                    bal.symbol === "USDC"
+                  );
+
+                  if (usdcAsset) {
+                    // Determine which chain we're on based on the pool address
+                    let targetChainId = 8453; // Default to Base
+                    for (const [chainId, poolAddr] of Object.entries(AAVE_V3_POOL_ADDRESSES)) {
+                      if (poolAddr.toLowerCase() === params[0].to?.toLowerCase()) {
+                        targetChainId = parseInt(chainId);
+                        break;
+                      }
+                    }
+
+                    // Get USDC decimals for this chain (most are 6, BNB is 18)
+                    const usdcDecimals = targetChainId === 56 ? 18 : 6;
+
+                    // Get current USDC balance on target chain
+                    const targetChainUSDC = usdcAsset.breakdown.find(
+                      (token: any) => token.chain.id === targetChainId
+                    );
+
+                    const currentUSDCBalance = new Decimal(targetChainUSDC?.balance || "0")
+                      .mul(Decimal.pow(10, usdcDecimals));
+
+                    const supplyAmountDecimal = new Decimal(supplyAmount.toString())
+                      .div(Decimal.pow(10, usdcDecimals));
+
+                    debugInfo("🏦 AAVE UNIFIED USDC SUPPLY", {
+                      targetChain: targetChainId,
+                      supplyAmount: supplyAmountDecimal.toString(),
+                      currentOnChain: currentUSDCBalance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                      totalUnified: usdcAsset.balance,
+                      breakdown: usdcAsset.breakdown.map((b: any) => ({
+                        chain: b.chain.name,
+                        balance: b.balance
+                      }))
+                    });
+
+                    // Calculate deficit - only bridge what's missing on target chain
+                    // NO gas reservation needed (USDC is ERC20, gas paid in native token)
+                    const deficit = new Decimal(supplyAmount.toString())
+                      .minus(currentUSDCBalance)
+                      .div(Decimal.pow(10, usdcDecimals));
+
+                    debugInfo("💡 AAVE USDC DEFICIT CALCULATION", {
+                      supplyAmount: supplyAmountDecimal.toString(),
+                      currentUSDCOnChain: currentUSDCBalance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                      deficit: deficit.toString(),
+                      targetChain: targetChainId
+                    });
+
+                    // If already have enough USDC on target chain, allow the transaction
+                    if (deficit.lessThanOrEqualTo(0)) {
+                      debugInfo("✅ AAVE: Already have enough USDC on target chain!");
+                      return originalRequest.apply(this, args);
+                    }
+
+                    // Check if approval is needed
+                    const userAddress = params[0].from || (window as any).ethereum?.selectedAddress;
+                    if (userAddress) {
+                      try {
+                        const allowance = await publicClient.readContract({
+                          address: assetAddress as `0x${string}`,
+                          abi: erc20Abi,
+                          functionName: "allowance",
+                          args: [userAddress as `0x${string}`, params[0].to as `0x${string}`],
+                        }) as bigint;
+
+                        const currentAllowance = new Decimal(allowance.toString());
+                        const requiredAmount = new Decimal(supplyAmount.toString());
+
+                        debugInfo("🔍 AAVE USDC ALLOWANCE CHECK", {
+                          currentAllowance: currentAllowance.div(Decimal.pow(10, usdcDecimals)).toString(),
+                          requiredAmount: requiredAmount.div(Decimal.pow(10, usdcDecimals)).toString(),
+                          needsApproval: currentAllowance.lessThan(requiredAmount)
+                        });
+
+                        // If allowance is insufficient, user needs to approve first
+                        if (currentAllowance.lessThan(requiredAmount)) {
+                          debugInfo("⚠️ AAVE: Insufficient USDC allowance - user needs to approve first");
+                          // Let the transaction proceed - Aave UI will handle approval flow
+                          return originalRequest.apply(this, args);
+                        }
+                      } catch (error) {
+                        debugInfo("⚠️ AAVE: Could not check allowance", error);
+                      }
+                    }
+
+                    // Show unified flow for bridging the deficit
+                    document.body.style.pointerEvents = "auto";
+                    requiredAmountRef.current = formatDecimalAmount(deficit.toString());
+                    setChainId(targetChainId);
+
+                    const chainNames: { [key: number]: string } = {
+                      1: "Ethereum",
+                      8453: "Base",
+                      10: "Optimism",
+                      42161: "Arbitrum",
+                      137: "Polygon",
+                      43114: "Avalanche",
+                      56: "BNB Chain",
+                      534352: "Scroll"
+                    };
+
+                    debugInfo("🌉 AAVE: Bridging USDC deficit to " + chainNames[targetChainId], {
+                      deficitAmount: deficit.toString(),
+                      sources: usdcAsset.breakdown.length + " chains",
+                      targetChain: targetChainId
+                    });
+
+                    // Bridge ONLY the deficit
+                    const handler = await ca.bridge({
+                      amount: deficit.toString(),
+                      token: "usdc" as SUPPORTED_TOKENS,
+                      chainId: targetChainId as SUPPORTED_CHAINS_IDS,
+                    });
+
+                    debugInfo("AAVE UNIFIED USDC BRIDGE Response", handler);
+
+                    if (!handler.success) {
+                      const errorMessage = {
+                        code: 4001,
+                        message: "User rejected the request.",
+                        details: "User denied unified USDC bridging for Aave supply.",
+                        version: "viem@2.33.3",
+                      };
+                      setError(true);
+                      throw errorMessage;
+                    }
+
+                    // DO NOT automatically send Aave transaction!
+                    // User must wait for bridging to complete (2-5 minutes)
+                    // Then Aave UI will handle approval (if needed) and supply
+                    debugInfo("✅ AAVE BRIDGING INITIATED - User must wait for completion then continue with Aave UI");
+
+                    // Block this transaction - user will retry after bridge completes
+                    const errorMessage = {
+                      code: 4001,
+                      message: `Bridging USDC to ${chainNames[targetChainId]}...`,
+                      details: "Please wait 2-5 minutes for the bridge to complete. Aave will handle approval and supply after USDC arrives.",
+                      version: "viem@2.33.3",
+                    };
+                    throw errorMessage;
+                  }
+                }
+              }
+            } catch (error) {
+              debugInfo("⚠️ AAVE: Could not decode supply transaction", error);
+              // Let transaction proceed if we can't decode it
+              return originalRequest.apply(this, args);
             }
           }
         }
