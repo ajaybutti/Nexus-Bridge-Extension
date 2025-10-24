@@ -1,3 +1,4 @@
+# NexusBridgExtension
 # Nexus Chain Abstraction Browser Extension
 
 A powerful browser extension that brings **unified multi-chain liquidity** to DeFi applications through intelligent transaction interception and automated cross-chain bridging. Built on the [Avail Nexus SDK](https://github.com/availproject/nexus), this extension seamlessly integrates chain abstraction into any Web3 dApp without requiring protocol modifications.
@@ -8,9 +9,9 @@ This browser extension acts as an **intelligent middleware layer** between users
 
 ### Key Features
 
-- 🔄 **Automatic Cross-Chain Bridging**: Detects when you lack sufficient tokens on one chain and automatically sources them from your balances on other chains
+- 🔄 **Automatic Cross-Chain Bridging + DeFi Execution**: Detects when you lack sufficient tokens on one chain and automatically sources them from your balances on other chains, then executes the DeFi action
 - 💰 **Unified Balance View**: Aggregates your token balances across all supported chains (Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, BNB Chain, HyperEVM)
-- 🎯 **Protocol-Agnostic Integration**: Works with DeFi protocols like Lido, Aave, Hyperliquid, LiFi, and more without requiring any protocol changes
+- 🎯 **Protocol-Agnostic Integration**: Works with DeFi protocols like Morpho, Aave, Lido, Hyperliquid, LiFi, and more without requiring any protocol changes
 - 🔐 **Non-Custodial**: All transactions are signed by your existing wallet - the extension never holds your funds
 - ⚡ **EIP-6963 Multi-Wallet Support**: Automatically detects and works with MetaMask, Rabby, Rainbow, and other Web3 wallets
 - 🎨 **Shadow DOM Isolation**: Clean UI injection that doesn't interfere with dApp styling
@@ -42,14 +43,26 @@ This browser extension acts as an **intelligent middleware layer** between users
 
 The extension has specialized integrations for:
 
-- **Lido** - ETH staking with unified ETH across chains
-- **Aave V3** - USDC lending on Base, Ethereum, Optimism, Arbitrum, Polygon, Avalanche, BNB Chain, Scroll
+- **Morpho** - USDC vault deposits with automatic bridging and deposit execution on Base
+- **Aave V3** - USDC lending with automatic bridging and supply execution on Base, Ethereum, Optimism, Arbitrum, Polygon, Avalanche, BNB Chain, Scroll
+- **Lido** - ETH staking with unified ETH across chains and automatic staking execution on Ethereum mainnet
 - **Hyperliquid** - Trading with automatic USDC bridging
 - **LiFi** - Cross-chain swaps with balance aggregation
 - **HypurrFi** - Vault deposits on HyperEVM
 - **Generic ERC20 Transfers** - Supports any token transfer with auto-bridging
 
 ## 🚀 How It Works
+
+### Example Flow: Morpho USDC Vault Deposit
+
+1. User visits Morpho on Base and tries to deposit 1000 USDC into a vault
+2. User only has 400 USDC on Base, but has 600 USDC across Ethereum and Arbitrum
+3. Extension intercepts the transaction and detects the 600 USDC deficit
+4. Shows unified balance modal with breakdown across chains
+5. User approves the intent to bridge 600 USDC from other chains → Base
+6. Nexus SDK handles the cross-chain transfer via Circle CCTP
+7. After bridging completes (~2-5 minutes), extension automatically calls Morpho's deposit function
+8. 1000 USDC gets deposited into the vault and user receives vault tokens - all automated
 
 ### Example Flow: Lido Staking
 
@@ -59,8 +72,8 @@ The extension has specialized integrations for:
 4. Shows unified balance modal: "You need 3.002 more ETH (including gas)"
 5. User approves the intent to bridge from Arbitrum → Ethereum
 6. Nexus SDK handles the cross-chain transfer via Circle CCTP
-7. After bridging completes (~2-5 minutes), user clicks "Stake" again
-8. Transaction succeeds with the unified ETH balance
+7. After bridging completes, extension automatically calls Lido's submit() function
+8. 5 ETH gets staked and user receives stETH - fully automated
 
 ### Example Flow: Aave USDC Supply
 
@@ -69,7 +82,8 @@ The extension has specialized integrations for:
 3. Extension detects 700 USDC deficit on Base
 4. Shows intent modal with breakdown of sources
 5. User approves → Nexus bridges 700 USDC from multiple chains to Base
-6. After arrival, Aave UI handles approval + supply automatically
+6. After arrival, extension automatically calls Aave's supply() function
+7. 1000 USDC gets supplied to Aave and user receives aTokens - completely automated
 
 ## 📦 Installation & Setup
 
@@ -184,7 +198,7 @@ nexus-hyperliquid-poc/
 
 - **Bridge Timing**: Cross-chain bridges take 2-5 minutes - users must manually retry transactions after bridging completes
 - **Gas Estimation**: Currently uses fixed gas reserves (0.002 ETH) for native token bridging
-- **Protocol Coverage**: Specialized integrations only cover major protocols (Lido, Aave, Hyperliquid) - other protocols use generic ERC20 detection
+- **Protocol Coverage**: Specialized integrations only cover major protocols (Morpho, Aave, Lido, Hyperliquid) - other protocols use generic ERC20 detection
 
 ## Quirks
 
@@ -193,19 +207,7 @@ nexus-hyperliquid-poc/
 - Uses Vite and React
 
 ## 🤝 Contributing
-
-This is a proof-of-concept project demonstrating Nexus SDK integration. Contributions are welcome!
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](https://www.apache.org/licenses/LICENSE-2.0) file for details.
-
-## 🔗 Links
-
-- [Avail Nexus SDK](https://github.com/availproject/nexus)
-- [Avail Project](https://www.availproject.org/)
-- [Extension Demo Video](https://github.com/user-attachments/assets/db4a9ff3-abf3-49c9-bf18-a476b0fdb8be)
-
+Happy to merge with  other defi protocol automation workflows using Nexus bridge 
 ---
 
 **Built with ❤️ using Avail Nexus SDK**
