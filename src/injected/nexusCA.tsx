@@ -989,11 +989,16 @@ function NexusApp() {
                 });
                 const chainId = parseInt(String(chainIdHex), 16);
                 setChainId(chainId);
+                
+                // For Aave, always bridge to Base mainnet (8453)
+                const targetChainId = 8453;
+                destinationChainIdRef.current = targetChainId;
+                
                 const handler = await ca.bridge({
                   amount: requiredAmount,
                   token: TOKEN_MAPPING[chainId][tokenAddress.toLowerCase()]
                     .symbol as SUPPORTED_TOKENS,
-                  chainId: chainId as SUPPORTED_CHAINS_IDS,
+                  chainId: targetChainId as SUPPORTED_CHAINS_IDS,
                 });
 
                 if (!handler.success) {

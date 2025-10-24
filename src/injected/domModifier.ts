@@ -1080,12 +1080,12 @@ function injectDomModifier() {
 
 // Aave V3 Integration - Show popup when Aave's Supply modal opens
 async function initializeAaveIntegration() {
-  // Check if we're on Aave Base market dashboard
-  const isAaveBaseMarket = (window.location.hostname.includes("app.aave.com") || window.location.hostname === "aave.com") &&
-    window.location.search.includes("marketName=proto_base_v3");
+  // Check if we're on any Aave domain (dashboard or market-specific)
+  const isAaveDomain = window.location.hostname.includes("app.aave.com") || 
+                      window.location.hostname === "aave.com";
   
-  if (!isAaveBaseMarket) {
-    console.log("🏦 NEXUS: Not on Base market, skipping Aave integration");
+  if (!isAaveDomain) {
+    console.log("🏦 NEXUS: Not on Aave domain, skipping Aave integration");
     return;
   }
 
@@ -1095,16 +1095,40 @@ async function initializeAaveIntegration() {
   }
   (window as any).__nexusAaveInitialized = true;
 
-  console.log("🏦 NEXUS: Aave integration active - will show popup when USDC Supply modal opens");
+  console.log("🏦 NEXUS: Aave integration active on", window.location.href, "- will show popup when USDC Supply modal opens");
 
   // Watch for Aave's Supply modal to appear
   const observer = new MutationObserver(async () => {
-    // Look for Aave's Supply modal (it contains "Supply USDC" text and an input)
-    const modalTitles = Array.from(document.querySelectorAll('h2, h3, div[class*="title"], div[class*="header"]'));
-    const supplyModal = modalTitles.find(el => el.textContent?.includes('Supply USDC'));
+    // Look for Aave's Supply modal with more flexible detection
+    const modalElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, div, span, p, button'));
     
-    if (supplyModal && !(window as any).__nexusAaveModalShown) {
-      console.log("🏦 NEXUS: Aave Supply USDC modal detected!");
+    // Check for various Supply USDC modal patterns
+    const supplyModal = modalElements.find(el => {
+      const text = el.textContent?.toLowerCase() || '';
+      return (
+        (text.includes('supply') && text.includes('usdc')) ||
+        text === 'supply usdc' ||
+        text.includes('deposit usdc') ||
+        (text.includes('supply') && el.closest('[role="dialog"]')) ||
+        (text.includes('usdc') && el.closest('[role="modal"]'))
+      );
+    });
+    
+    // Also check for USDC token selectors or inputs
+    const usdcInputs = Array.from(document.querySelectorAll('input, select')).find(input => {
+      const placeholder = (input as HTMLInputElement).placeholder?.toLowerCase() || '';
+      const value = (input as HTMLInputElement).value?.toLowerCase() || '';
+      const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+      return placeholder.includes('usdc') || value.includes('usdc') || ariaLabel.includes('usdc');
+    });
+    
+    if ((supplyModal || usdcInputs) && !(window as any).__nexusAaveModalShown) {
+      console.log("🏦 NEXUS: Aave Supply USDC modal detected!", {
+        foundModal: !!supplyModal,
+        foundInput: !!usdcInputs,
+        modalText: supplyModal?.textContent,
+        url: window.location.href
+      });
       (window as any).__nexusAaveModalShown = true;
       
       // Wait a bit for modal to fully render
@@ -1128,9 +1152,21 @@ async function initializeAaveIntegration() {
       }
     }
     
-    // Reset flag when modal closes
-    if (!supplyModal && (window as any).__nexusAaveModalShown) {
-      (window as any).__nexusAaveModalShown = false;
+    // Reset flag when modal closes - check if any supply modal is still visible
+    if ((window as any).__nexusAaveModalShown) {
+      const stillHasModal = modalElements.some(el => {
+        const text = el.textContent?.toLowerCase() || '';
+        return (
+          (text.includes('supply') && text.includes('usdc')) ||
+          text === 'supply usdc' ||
+          text.includes('deposit usdc')
+        );
+      });
+      
+      if (!stillHasModal && !usdcInputs) {
+        console.log("🏦 NEXUS: Aave Supply modal closed");
+        (window as any).__nexusAaveModalShown = false;
+      }
     }
   });
   
@@ -1209,6 +1245,8 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
       </label>
       <div style="position: relative;">
         <input type="text" inputmode="decimal" id="nexus-eth-amount" placeholder="0.0" 
+               autocomplete="off"
+               spellcheck="false"
                style="
                  width: 100%;
                  padding: 16px 50px 16px 16px;
@@ -1221,11 +1259,12 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
                  outline: none;
                  transition: all 0.3s ease;
                  box-sizing: border-box;
-               " 
-               onfocus="this.style.borderColor='#00ff88'"
-               onblur="this.style.borderColor='rgba(255,255,255,0.2)'"
-               oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');">
-        <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600;">ETH</span>
+                 pointer-events: auto;
+                 user-select: auto;
+                 -webkit-user-select: auto;
+                 cursor: text;
+               ">
+        <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: 600; pointer-events: none;">ETH</span>
       </div>
       <button id="nexus-max-btn" style="
         margin-top: 8px;
@@ -1287,9 +1326,66 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
   const cancelBtn = modalOverlay.querySelector('#nexus-cancel-btn') as HTMLButtonElement;
   const confirmBtn = modalOverlay.querySelector('#nexus-confirm-btn') as HTMLButtonElement;
   
+  // Ensure the input field is fully interactive
+  ethAmountInput.addEventListener('focus', (e) => {
+    e.stopPropagation();
+    ethAmountInput.style.borderColor = '#00ff88';
+    console.log("🎯 NEXUS: ETH input focused");
+  });
+  
+  ethAmountInput.addEventListener('blur', (e) => {
+    e.stopPropagation();
+    ethAmountInput.style.borderColor = 'rgba(255,255,255,0.2)';
+  });
+  
+  // Input validation - only allow numbers and decimal point
+  ethAmountInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    console.log("⌨️ NEXUS: ETH input event fired!");
+    const input = e.target as HTMLInputElement;
+    // Remove any non-numeric characters except decimal point
+    let value = input.value.replace(/[^0-9.]/g, '');
+    // Only allow one decimal point
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+    input.value = value;
+    console.log("⌨️ NEXUS: ETH input value changed to:", value);
+  });
+  
+  // Ensure input is clickable and focusable
+  ethAmountInput.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ethAmountInput.focus();
+    console.log("🖱️ NEXUS: ETH input clicked and focused");
+  });
+  
+  // Handle keydown events to ensure numbers work
+  ethAmountInput.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    console.log("⌨️ NEXUS: Key pressed:", e.key);
+    // Allow: backspace, delete, tab, escape, enter, decimal point
+    if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
+        // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+        (e.keyCode === 65 && e.ctrlKey === true) ||
+        (e.keyCode === 67 && e.ctrlKey === true) ||
+        (e.keyCode === 86 && e.ctrlKey === true) ||
+        (e.keyCode === 88 && e.ctrlKey === true) ||
+        // Allow: home, end, left, right
+        (e.keyCode >= 35 && e.keyCode <= 39)) {
+      return;
+    }
+    // Ensure that it is a number and stop the keypress
+    if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+      e.preventDefault();
+    }
+  });
+  
   // Max button functionality
   maxBtn.addEventListener('click', () => {
     ethAmountInput.value = totalEthBalance.toString();
+    console.log("🎯 NEXUS: MAX button clicked, set value to:", totalEthBalance);
   });
   
   // Cancel button
@@ -1343,6 +1439,14 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
       }
       
       console.log(`💫 NEXUS: Calling ca.bridge() to bridge ${deficit.toFixed(6)} ETH deficit (including ${gasReserve} ETH gas reserve) to Ethereum mainnet`);
+      console.log(`🔧 NEXUS: Bridge parameters:`, {
+        amount: deficit.toString(),
+        token: 'eth',
+        chainId: 1,
+        deficit: deficit,
+        gasReserve: gasReserve,
+        stakeAmount: stakeAmount
+      });
       
       // Bridge ONLY the deficit amount from other chains
       const bridgeResult = await (window as any).nexus.bridge({
@@ -1351,28 +1455,28 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
         chainId: 1, // Ethereum mainnet
       });
       
-      console.log(`✅ NEXUS: Bridge result:`, bridgeResult);
+      console.log(`✅ NEXUS: Bridge result (full object):`, JSON.stringify(bridgeResult, null, 2));
       
       if (bridgeResult.success) {
         // Success! Auto-fill Lido's input and close modal
-        alert(`✅ Successfully bridged ${deficit.toFixed(6)} ETH to Ethereum mainnet!\n\nAmount includes ${gasReserve} ETH gas reserve.\n\nLido's input will be auto-filled with ${stakeAmount.toFixed(4)} ETH.\n\nClick Lido's stake button to complete!`);
-        
-        // Auto-fill Lido's ETH amount input
-        setTimeout(() => {
-          const lidoInput = document.querySelector('input[type="text"]') as HTMLInputElement;
-          if (lidoInput) {
-            lidoInput.value = stakeAmount.toString();
-            // Trigger input event so Lido's validation updates
-            lidoInput.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log(`✅ NEXUS: Auto-filled Lido input with ${stakeAmount} ETH`);
-          }
-        }, 500);
-        
+        alert(`✅ Successfully initiated bridge of ${deficit.toFixed(6)} ETH to Ethereum mainnet!\n\nAmount includes ${gasReserve} ETH gas reserve.\n\nBridging will take 2-5 minutes. Please wait for completion, then try staking again on Lido.`);
         modalOverlay.remove();
       } else {
-        // User rejected or bridging failed
-        console.log('❌ NEXUS: Bridging was rejected or failed');
-        alert('Bridging was cancelled or failed. Please try again.');
+        // More detailed error handling
+        console.log('❌ NEXUS: Bridge result failed:', bridgeResult);
+        
+        // Check if it's a user rejection vs actual failure
+        if (bridgeResult.error && bridgeResult.error.includes && 
+            (bridgeResult.error.includes('rejected') || bridgeResult.error.includes('denied') || bridgeResult.error.includes('cancelled'))) {
+          alert('❌ Bridging was cancelled by user. Please try again if you want to proceed.');
+        } else if (bridgeResult.error && bridgeResult.error.includes && bridgeResult.error.includes('insufficient')) {
+          alert('❌ Insufficient balance on source chains to complete the bridge. Please check your balances.');
+        } else {
+          // Show more detailed error info
+          const errorMsg = bridgeResult.error || bridgeResult.message || 'Unknown error';
+          alert(`❌ Bridging failed: ${errorMsg}\n\nThis might be temporary. Please check:\n- Your wallet connection\n- Network connectivity\n- Try again in a few moments`);
+        }
+        
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = '🚀 Stake with Unified ETH';
         confirmBtn.style.opacity = '1';
@@ -1380,7 +1484,26 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
       
     } catch (error: any) {
       console.error('❌ NEXUS: Error during unified ETH bridging:', error);
-      alert(`Failed to initiate bridging: ${error?.message || error}`);
+      
+      // More detailed error handling for different types of errors
+      let errorMessage = 'Failed to initiate bridging';
+      
+      if (error.code === 4001) {
+        errorMessage = '❌ User rejected the transaction in wallet';
+      } else if (error.message && error.message.includes('insufficient')) {
+        errorMessage = '❌ Insufficient funds for bridging';
+      } else if (error.message && error.message.includes('network')) {
+        errorMessage = '❌ Network error - please check your connection';
+      } else if (error.message && error.message.includes('timeout')) {
+        errorMessage = '❌ Request timed out - please try again';
+      } else if (error.message) {
+        errorMessage = `❌ Error: ${error.message}`;
+      } else {
+        errorMessage = `❌ Unknown error: ${error}`;
+      }
+      
+      alert(`${errorMessage}\n\n🔧 Troubleshooting tips:\n- Check wallet connection\n- Ensure sufficient balance\n- Try refreshing the page\n- Check browser console for details`);
+      
       confirmBtn.disabled = false;
       confirmBtn.innerHTML = '🚀 Stake with Unified ETH';
       confirmBtn.style.opacity = '1';
@@ -1394,9 +1517,11 @@ function openUnifiedEthStakeModal(totalEthBalance: number, ethChains: any[]) {
     }
   });
   
-  // Focus on input
+  // Focus on input and ensure it's ready for user interaction
   setTimeout(() => {
     ethAmountInput.focus();
+    ethAmountInput.click(); // Trigger click to ensure focus
+    console.log("🎯 NEXUS: ETH input focused and ready for input");
   }, 100);
 }
 

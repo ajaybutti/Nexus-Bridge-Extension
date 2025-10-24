@@ -112,7 +112,7 @@ export function setCAEvents(ca: NexusSDK) {
           const div = createDiv(exampleDiv, s.typeID, s.type);
           div.id = "intent-fulfilled";
           div.innerHTML = `
-          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Supplying to Destination</div>
+          <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(255, 255, 255); text-align: center; display: block;" bis_skin_checked="1">Receiving on Destination Chain</div>
           <div class="sc-bjfHbI jxtURp body12Regular" style="color: rgb(148, 158, 156); text-align: center; display: block;" bis_skin_checked="1">Not Supplied</div>
           `;
           mainDiv.insertBefore(div, exampleDiv);
