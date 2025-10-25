@@ -925,6 +925,477 @@ async function openUnifiedUsdcSupplyModal(totalUsdcBalance: number, usdcChains: 
   }, 200);
 }
 
+// Function to open unified USDC supply modal for Morpho
+async function openMorphoUsdcSupplyModal(totalUsdcBalance: number, usdcChains: any[]) {
+  console.log("🦋 NEXUS: Opening unified USDC supply modal for Morpho");
+  
+  // Remove existing modal if present
+  const existingModal = document.querySelector('.nexus-morpho-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Get vault address from current URL
+  const vaultAddress = extractVaultAddressFromUrl(window.location.href);
+  if (!vaultAddress) {
+    alert('⚠️ Unable to detect Morpho vault address from this page. Please make sure you\'re on a specific vault page.');
+    return;
+  }
+
+  console.log(`🦋 NEXUS: Detected Morpho vault address: ${vaultAddress}`);
+
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.className = 'nexus-morpho-modal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    backdrop-filter: blur(5px);
+  `;
+  
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">🦋 Supply with Unified USDC</h2>
+      <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 14px;">Supply USDC to Morpho vault from all your chains</p>
+    </div>
+    
+    <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 600; color: #fff;">Available Balance</span>
+        <span style="font-weight: bold; color: #A5B4FC; font-size: 18px;">$${totalUsdcBalance.toFixed(2)} USDC</span>
+      </div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.8);">
+        ${usdcChains.map((chain: any) => `
+          <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>${removeMainnet(chain.chain.name)}</span>
+            <span style="color: #A5B4FC; font-weight: 600;">$${parseFloat(chain.balance).toFixed(2)} USDC</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 600;">USDC Amount to Supply</label>
+      <div style="position: relative;">
+        <input 
+          type="number" 
+          id="morpho-usdc-amount-input" 
+          placeholder="100.00"
+          step="0.01"
+          min="0.01"
+          max="${totalUsdcBalance}"
+          inputmode="decimal"
+          style="
+            width: 100%;
+            padding: 14px 60px 14px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            -moz-appearance: textfield;
+          "
+        />
+        <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 2px;">
+          <button id="morpho-increment-btn" style="
+            width: 24px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">▲</button>
+          <button id="morpho-decrement-btn" style="
+            width: 24px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">▼</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <button id="morpho-quick-25" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">25%</button>
+        <button id="morpho-quick-50" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">50%</button>
+        <button id="morpho-quick-75" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">75%</button>
+        <button id="morpho-quick-max" style="
+          flex: 1;
+          padding: 8px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: white;
+          font-size: 12px;
+          cursor: pointer;
+        ">MAX</button>
+      </div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px;">
+        Min: $0.01 USDC • Max: $${totalUsdcBalance.toFixed(2)} USDC
+      </div>
+    </div>
+
+    <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 20px;">
+      <div style="font-size: 12px; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Target Vault:</div>
+      <div style="font-size: 10px; font-family: monospace; word-break: break-all; color: #A5B4FC;">${vaultAddress}</div>
+    </div>
+
+    <button id="morpho-bridge-supply-btn" style="
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    ">
+      🚀 Bridge + Supply to Morpho
+      <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Base then supply automatically</div>
+    </button>
+  `;
+
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+
+  // Get input element and control buttons
+  const usdcAmountInput = modalContent.querySelector('#morpho-usdc-amount-input') as HTMLInputElement;
+  const bridgeSupplyBtn = modalContent.querySelector('#morpho-bridge-supply-btn') as HTMLButtonElement;
+  
+  // Get control buttons
+  const incrementBtn = modalContent.querySelector('#morpho-increment-btn') as HTMLButtonElement;
+  const decrementBtn = modalContent.querySelector('#morpho-decrement-btn') as HTMLButtonElement;
+  const quick25Btn = modalContent.querySelector('#morpho-quick-25') as HTMLButtonElement;
+  const quick50Btn = modalContent.querySelector('#morpho-quick-50') as HTMLButtonElement;
+  const quick75Btn = modalContent.querySelector('#morpho-quick-75') as HTMLButtonElement;
+  const quickMaxBtn = modalContent.querySelector('#morpho-quick-max') as HTMLButtonElement;
+
+  // Ensure input is enabled and accessible
+  if (usdcAmountInput) {
+    usdcAmountInput.disabled = false;
+    usdcAmountInput.readOnly = false;
+    usdcAmountInput.style.pointerEvents = 'auto';
+    console.log("🦋 NEXUS: Morpho input controls ready");
+  }
+
+  // Add increment/decrement functionality
+  incrementBtn?.addEventListener('click', () => {
+    const current = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.min(current + 0.1, totalUsdcBalance);
+    usdcAmountInput.value = newValue.toFixed(2);
+  });
+
+  decrementBtn?.addEventListener('click', () => {
+    const current = parseFloat(usdcAmountInput.value || '0');
+    const newValue = Math.max(current - 0.1, 0.01);
+    usdcAmountInput.value = newValue.toFixed(2);
+  });
+
+  // Add quick amount buttons
+  quick25Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.25).toFixed(2);
+  });
+
+  quick50Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.5).toFixed(2);
+  });
+
+  quick75Btn?.addEventListener('click', () => {
+    usdcAmountInput.value = (totalUsdcBalance * 0.75).toFixed(2);
+  });
+
+  quickMaxBtn?.addEventListener('click', () => {
+    usdcAmountInput.value = totalUsdcBalance.toFixed(2);
+  });
+
+  // Close modal on overlay click
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      modalOverlay.remove();
+    }
+  });
+
+  // Bridge + Supply button handler
+  bridgeSupplyBtn.addEventListener('click', async () => {
+    const supplyAmount = parseFloat(usdcAmountInput.value || '0');
+    
+    if (!supplyAmount || supplyAmount <= 0) {
+      alert('Please enter a valid USDC amount');
+      return;
+    }
+
+    if (supplyAmount < 0.01) {
+      alert('Minimum amount is $0.01 USDC');
+      return;
+    }
+
+    if (supplyAmount > totalUsdcBalance) {
+      alert(`Amount exceeds your total USDC balance of $${totalUsdcBalance.toFixed(2)}`);
+      return;
+    }
+
+    bridgeSupplyBtn.disabled = true;
+    bridgeSupplyBtn.innerHTML = '⏳ Bridging...';
+
+    try {
+      console.log(`🦋 NEXUS: Bridging $${supplyAmount} USDC to Base for Morpho supply`);
+      
+      // Set destination to Base chain (8453) for Morpho
+      if ((window as any).nexus?.setDestinationChainId) {
+        (window as any).nexus.setDestinationChainId(8453);
+        console.log(`🦋 NEXUS: Set destination chainId to 8453 (Base)`);
+      }
+      
+      const bridgeResult = await (window as any).nexus.bridge({
+        amount: supplyAmount.toString(),
+        token: 'usdc',
+        chainId: 8453, // Base chain
+      });
+      
+      if (bridgeResult.success) {
+        modalOverlay.remove();
+        
+        // Show auto-supply loading modal
+        const loadingModal = document.createElement('div');
+        loadingModal.className = 'nexus-morpho-loading-modal';
+        loadingModal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 999999;
+          backdrop-filter: blur(5px);
+        `;
+        
+        const loadingContent = document.createElement('div');
+        loadingContent.style.cssText = `
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 16px;
+          padding: 32px;
+          width: 400px;
+          max-width: 90vw;
+          box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: white;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          text-align: center;
+        `;
+        
+        loadingContent.innerHTML = `
+          <div style="margin-bottom: 24px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🦋</div>
+            <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 24px; font-weight: 600;">Auto Supplying...</h2>
+            <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 14px;">Bridged $${supplyAmount} USDC → Now supplying to Morpho</p>
+          </div>
+          
+          <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">💰 Supply Amount</div>
+            <div style="font-size: 20px; font-weight: bold; color: #A5B4FC;">$${supplyAmount.toFixed(2)} USDC</div>
+          </div>
+          
+          <div style="display: flex; align-items: center; justify-content: center; gap: 12px; color: rgba(255,255,255,0.8);">
+            <div style="width: 20px; height: 20px; border: 2px solid #A5B4FC; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <span>Supplying USDC to Morpho vault...</span>
+          </div>
+          
+          <style>
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          </style>
+        `;
+        
+        loadingModal.appendChild(loadingContent);
+        document.body.appendChild(loadingModal);
+        
+        // Wait for bridge to settle, then auto-supply to Morpho
+        setTimeout(async () => {
+          try {
+            console.log(`🦋 NEXUS: Auto-supplying $${supplyAmount} USDC to Morpho vault after successful bridge`);
+            const result = await approveAndDepositToVault(vaultAddress, supplyAmount.toString());
+            loadingModal.remove();
+            
+            if (result.success) {
+              // Show final success modal
+              const successModal = document.createElement('div');
+              successModal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 999999;
+                backdrop-filter: blur(5px);
+              `;
+              
+              const successContent = document.createElement('div');
+              successContent.style.cssText = `
+                background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+                border-radius: 16px;
+                padding: 32px;
+                width: 400px;
+                max-width: 90vw;
+                box-shadow: 0 20px 60px rgba(16, 185, 129, 0.3);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                text-align: center;
+              `;
+              
+              successContent.innerHTML = `
+                <div style="margin-bottom: 24px;">
+                  <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+                  <h2 style="margin: 0 0 8px 0; color: #fff; font-size: 28px; font-weight: 600;">Supply Complete!</h2>
+                  <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 16px;">Fully automated bridge + Morpho supply completed</p>
+                </div>
+                
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span>✅ Bridged to Base:</span>
+                    <span style="font-weight: bold;">$${supplyAmount.toFixed(2)} USDC</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span>✅ Supplied to Morpho:</span>
+                    <span style="font-weight: bold;">$${supplyAmount.toFixed(2)} USDC</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span>✅ Received Vault Shares:</span>
+                    <span style="font-weight: bold;">~$${supplyAmount.toFixed(2)} shares</span>
+                  </div>
+                </div>
+                
+                <div style="margin-bottom: 24px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                  <div style="font-size: 12px; opacity: 0.8; margin-bottom: 4px;">Transaction Hash:</div>
+                  <div style="font-size: 10px; font-family: monospace; word-break: break-all;">${result.txHash}</div>
+                </div>
+                
+                <button onclick="this.parentElement.parentElement.remove()" style="
+                  width: 100%;
+                  padding: 16px;
+                  background: rgba(255,255,255,0.2);
+                  border: 1px solid rgba(255,255,255,0.3);
+                  border-radius: 12px;
+                  color: white;
+                  font-size: 16px;
+                  font-weight: 600;
+                  cursor: pointer;
+                  transition: all 0.3s ease;
+                ">
+                  🚀   Close
+                </button>
+              `;
+              
+              successModal.appendChild(successContent);
+              document.body.appendChild(successModal);
+              
+            } else {
+              alert(`⚠️ Bridge succeeded but auto-supply failed:\n\n${result.error}\n\nYou can manually supply your USDC to the Morpho vault.`);
+            }
+          } catch (error: any) {
+            loadingModal.remove();
+            console.error('🦋 NEXUS: Error during auto-supply:', error);
+            alert(`⚠️ Bridge succeeded but auto-supply failed:\n\n${error.message || error}\n\nYou can manually supply your USDC to the Morpho vault.`);
+          }
+        }, 3000); // Wait 3 seconds for bridge to settle
+        
+      } else {
+        bridgeSupplyBtn.disabled = false;
+        bridgeSupplyBtn.innerHTML = `🚀 Bridge + Supply to Morpho<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Base then supply automatically</div>`;
+        alert('Bridging was cancelled or failed. Please try again.');
+      }
+      
+    } catch (error: any) {
+      console.error('🦋 NEXUS: Error during unified USDC bridging:', error);
+      bridgeSupplyBtn.disabled = false;
+      bridgeSupplyBtn.innerHTML = `🚀 Bridge + Supply to Morpho<div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Bridge USDC to Base then supply automatically</div>`;
+      alert(`Failed to initiate bridging: ${error?.message || error}`);
+    }
+  });
+  
+  // Enhanced focus on input
+  setTimeout(() => {
+    if (usdcAmountInput) {
+      usdcAmountInput.focus();
+      usdcAmountInput.click(); // Additional focus attempt
+      console.log("🦋 NEXUS: Morpho input focused and ready for typing");
+    }
+  }, 200);
+}
+
 function injectDomModifier() {
   if (document.getElementById("root") || document.documentElement) {
     const observer = new MutationObserver((mutations) => {
@@ -1171,6 +1642,90 @@ if (window.location.hostname.includes("lido.fi") || window.location.hostname.inc
   setTimeout(addLidoButton, 500);
   setTimeout(addLidoButton, 2000);
   setTimeout(addLidoButton, 5000);
+}
+
+// Function to add Morpho unified USDC button
+function addMorphoButton() {
+  // Check if button already exists
+  if (document.querySelector('#nexus-morpho-unified-btn')) {
+    return;
+  }
+
+  console.log("🔥 NEXUS: Adding Morpho unified USDC button");
+
+  const unifiedBtn = document.createElement("button");
+  unifiedBtn.id = "nexus-morpho-unified-btn";
+  unifiedBtn.innerHTML = "🚀 Bridge + Supply to Morpho";
+  unifiedBtn.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 999999;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  `;
+
+  unifiedBtn.addEventListener("mouseenter", () => {
+    unifiedBtn.style.transform = "translateY(-2px)";
+    unifiedBtn.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.6)";
+  });
+
+  unifiedBtn.addEventListener("mouseleave", () => {
+    unifiedBtn.style.transform = "translateY(0)";
+    unifiedBtn.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.4)";
+  });
+
+  unifiedBtn.addEventListener("click", async () => {
+    console.log("🔥 NEXUS: Morpho unified button clicked!");
+    
+    // Fetch USDC balances
+    try {
+      const balances = await fetchUnifiedBalances();
+      const usdcAsset = balances.find((asset: any) => asset.symbol === "USDC");
+      
+      if (usdcAsset) {
+        const totalUsdcBalance = parseFloat(usdcAsset.balance || "0");
+        const usdcChains = usdcAsset.breakdown?.filter((token: any) => Number(token.balance) > 0) || [];
+        openMorphoUsdcSupplyModal(totalUsdcBalance, usdcChains);
+      } else {
+        // Open modal anyway with empty data
+        openMorphoUsdcSupplyModal(0, []);
+      }
+    } catch (error) {
+      console.error("🔥 NEXUS: Error fetching balances for Morpho:", error);
+      // Open modal anyway with empty data
+      openMorphoUsdcSupplyModal(0, []);
+    }
+  });
+
+  document.body.appendChild(unifiedBtn);
+  console.log("🔥 NEXUS: Unified USDC button added to Morpho successfully!");
+}
+
+// Initialize Morpho integration immediately for Morpho domains
+if (window.location.hostname.includes("app.morpho.org") || window.location.hostname.includes("morpho.org")) {
+  console.log("🔥 NEXUS: On Morpho domain, initializing unified USDC integration immediately");
+  
+  // Add button immediately
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', addMorphoButton);
+  } else {
+    addMorphoButton();
+  }
+  
+  // Also try after delays to ensure it appears
+  setTimeout(addMorphoButton, 500);
+  setTimeout(addMorphoButton, 2000);
+  setTimeout(addMorphoButton, 5000);
 }
 
 // Initialize Aave integration after a short delay to ensure DOM is ready

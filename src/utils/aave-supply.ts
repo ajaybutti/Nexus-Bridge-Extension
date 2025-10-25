@@ -99,6 +99,17 @@ export async function supplyToAave(amount: string): Promise<{ success: boolean; 
       throw new Error('MetaMask not found');
     }
 
+    // Check current chain first
+    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainId = parseInt(currentChainId, 16);
+    
+    console.log(`🏦 NEXUS: Current chain ID: ${chainId}`);
+    
+    // Only support Base chain for now (8453)
+    if (chainId !== 8453) {
+      throw new Error(`Aave supply only supported on Base chain. Current chain: ${chainId}. Please switch to Base network.`);
+    }
+
     // Create clients
     const publicClient = createPublicClient({
       chain: base,
